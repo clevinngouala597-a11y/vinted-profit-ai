@@ -7,15 +7,16 @@ import { useData } from '../lib/useData';
 import { ORDER_LABEL, type OrderStatus } from '../lib/types';
 import { Empty, Money, PageHeader, Thumb } from '../ui/kit';
 
-type F = 'toutes' | 'attente' | 'expedier' | 'expediees' | 'terminees' | 'perte' | 'retours';
+type F = 'toutes' | 'confirmer' | 'expediees' | 'terminees' | 'annulees' | 'remboursees' | 'attente' | 'perte';
 const FILTERS: [F, string][] = [
   ['toutes', 'Toutes'],
-  ['attente', 'Paiement en attente'],
-  ['expedier', 'À expédier'],
+  ['confirmer', 'À confirmer'],
   ['expediees', 'Expédiées'],
   ['terminees', 'Terminées'],
+  ['annulees', 'Annulées'],
+  ['remboursees', 'Remboursées'],
+  ['attente', 'Paiement en attente'],
   ['perte', 'À perte'],
-  ['retours', 'Retours et annulations'],
 ];
 
 export const orderBadge = (s: OrderStatus) =>
@@ -32,11 +33,12 @@ export function Sales() {
   const list = all.filter(({ sale: s, isLoss, cancelled }) => {
     switch (f) {
       case 'attente': return isAwaitingPayment(ds, s) && !cancelled;
-      case 'expedier': return s.orderStatus === 'confirmee';
+      case 'confirmer': return s.orderStatus === 'confirmee' || s.orderStatus === 'en_attente';
       case 'expediees': return s.orderStatus === 'expediee';
       case 'terminees': return s.orderStatus === 'terminee';
+      case 'annulees': return s.orderStatus === 'annulee';
+      case 'remboursees': return ['retournee', 'remboursee'].includes(s.orderStatus) || ds.refunds.some((r) => r.saleId === s.id);
       case 'perte': return isLoss && !cancelled;
-      case 'retours': return ['annulee', 'retournee', 'remboursee'].includes(s.orderStatus) || ds.refunds.some((r) => r.saleId === s.id);
       default: return true;
     }
   });
@@ -45,7 +47,7 @@ export function Sales() {
 
   return (
     <>
-      <PageHeader title="Ventes" sub={`${list.length} vente${list.length > 1 ? 's' : ''} · ${formatEuros(totRev)} encaissés`} right={<button className="btn btn-primary btn-sm" onClick={() => go('vente')}>Ajouter</button>} />
+      <PageHeader title="Ventes" sub={`${list.length} vente${list.length > 1 ? 's' : ''} · ${formatEuros(totRev)} encaissés`} right={ds.settings.showStock ? <button className="btn btn-primary btn-sm" onClick={() => go('vente')}>Ajouter</button> : undefined} />
       <div className="chips" role="group" aria-label="Filtrer les ventes">
         {FILTERS.map(([x, l]) => <button key={x} className="chip" aria-pressed={f === x} onClick={() => setF(x)}>{l}</button>)}
       </div>
@@ -58,7 +60,9 @@ export function Sales() {
       <div style={{ marginTop: 12 }}>
         {list.length === 0 ? (
           ds.sales.length === 0 ? (
-            <Empty title="Aucune vente pour l'instant" text="Quand un article part, enregistre la vente pour connaître ton bénéfice réel." action={<button className="btn btn-primary" onClick={() => go('vente')}>Enregistrer une vente</button>} />
+            ds.settings.showStock
+              ? <Empty title="Aucune vente pour l'instant" text="Quand un article part, enregistre la vente pour connaître ton bénéfice réel." action={<button className="btn btn-primary" onClick={() => go('vente')}>Enregistrer une vente</button>} />
+              : <Empty title="Aucune vente pour l'instant" text="Tes ventes Vinted arriveront ici toutes seules grâce à la synchro Gmail." action={<button className="btn btn-primary" onClick={() => go('synchro')}>Synchro Vinted</button>} />
           ) : (
             <Empty title="Aucune vente dans ce filtre" text="Choisis un autre filtre pour voir tes ventes." action={<button className="btn btn-ghost" onClick={() => setF('toutes')}>Voir toutes les ventes</button>} />
           )

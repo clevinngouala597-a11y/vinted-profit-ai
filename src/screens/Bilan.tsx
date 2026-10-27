@@ -42,8 +42,8 @@ function ToCheck() {
   const pl = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
   const rows: [number, string, string][] = [
     [pending.length, pl(pending.length, 'paiement en attente', 'paiements en attente'), 'ventes?filtre=attente'],
-    [toShip.length, pl(toShip.length, 'vente à expédier', 'ventes à expédier'), 'ventes?filtre=expedier'],
-    [waitingReturn.length, pl(waitingReturn.length, 'retour pas encore récupéré', 'retours pas encore récupérés'), 'ventes?filtre=retours'],
+    [toShip.length, pl(toShip.length, 'vente à expédier', 'ventes à expédier'), 'ventes?filtre=confirmer'],
+    [waitingReturn.length, pl(waitingReturn.length, 'retour pas encore récupéré', 'retours pas encore récupérés'), 'ventes?filtre=remboursees'],
     [losses.length, pl(losses.length, 'vente à perte', 'ventes à perte'), 'ventes?filtre=perte'],
     [noProof.length, pl(noProof.length, 'dépense sans justificatif', 'dépenses sans justificatif'), 'depenses'],
   ];

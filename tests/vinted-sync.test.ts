@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { VPDatabase, getDb, setDb } from '../src/lib/db';
-import { completeItemCost, correctSale, deleteSale, updateItem, defaultSettings, loadDataset, recordPurchase, recordSale, saveSettings } from '../src/lib/actions';
+import { changeSaleStatus, completeItemCost, correctSale, deleteSale, updateItem, defaultSettings, loadDataset, recordPurchase, recordSale, saveSettings } from '../src/lib/actions';
 import { cashState, periodMetrics, saleBreakdown } from '../src/lib/engine';
 import { dismissSynced, fetchVintedEmails, guessCategory, resolveSale, syncNow, unpaidInboxSales } from '../src/lib/vinted/sync';
 import type { RawEmail } from '../src/lib/vinted/parse';
@@ -295,6 +295,39 @@ describe('Modifier ou supprimer une vente synchronisée', () => {
     const { itemIds } = await recordPurchase({ date: '2026-10-04', source: 'Créé par la synchro Vinted', commonFees: 0, lotPrice: null, lines: [{ name: '[image: Montre argentée] Montre argentée', category: 'Accessoires', price: 0, targetPrice: null, status: 'en_vente' }] });
     await syncNow(fakeScript, '2026-10-27');
     expect((await loadDataset()).items.find((i) => i.id === itemIds[0])!.name).toBe('Montre argentée');
+  });
+});
+
+describe('Changer le statut d’une vente à la main', () => {
+  it('tous les sens : annulée → rétablie → expédiée → terminée → remboursée → à confirmer', async () => {
+    await buy('Veste coupe-vent - Taille L', 1000);
+    const ds0 = await loadDataset();
+    const saleId = await recordSale({ date: '2026-10-10', itemIds: [ds0.items[0].id], listedPrice: 6500, discount: 0, sellerRevenue: 6500, platformFees: 0, packagingCost: 0, otherCosts: 0, paymentStatus: 'en_attente' });
+    const check = async (status: string, revenue: number, balance: number, pending: number, itemStatus: string) => {
+      const ds = await loadDataset();
+      const s = ds.sales.find((x) => x.id === saleId)!;
+      expect(s.orderStatus).toBe(status);
+      expect(periodMetrics(ds, '2026-10-01', '2026-10-31').revenue).toBe(revenue);
+      expect(cashState(ds).balance).toBe(balance);
+      expect(cashState(ds).pendingIn).toBe(pending);
+      expect(ds.items[0].status).toBe(itemStatus);
+    };
+    await changeSaleStatus(saleId, 'annulee', '2026-10-12');
+    await check('annulee', 0, 10000 - 1000, 0, 'en_vente');
+    await changeSaleStatus(saleId, 'confirmee', '2026-10-13');
+    await check('confirmee', 6500, 9000, 6500, 'vendu');
+    await changeSaleStatus(saleId, 'expediee', '2026-10-14');
+    await check('expediee', 6500, 9000, 6500, 'expedie');
+    await changeSaleStatus(saleId, 'terminee', '2026-10-20');
+    await check('terminee', 6500, 9000 + 6500, 0, 'termine');
+    await changeSaleStatus(saleId, 'remboursee', '2026-10-22');
+    const ds = await loadDataset();
+    expect(saleBreakdown(ds, ds.sales[0]).profit).toBe(0);
+    expect(cashState(ds).balance).toBe(9000);
+    expect(ds.items[0].status).toBe('retourne');
+    await changeSaleStatus(saleId, 'confirmee', '2026-10-23'); // erreur : on revient en arrière
+    await check('confirmee', 6500, 9000 + 6500, 0, 'vendu');
+    expect((await loadDataset()).refunds).toHaveLength(0);
   });
 });
 

@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { cancelSale, completeItemCost, correctSale, deleteSale, markItemRecovered, markPaymentReceived, recordRefund, setOrderStatus, updateItem } from '../lib/actions';
+import { changeSaleStatus, completeItemCost, correctSale, deleteSale, markItemRecovered, markPaymentReceived, recordRefund, updateItem } from '../lib/actions';
 import { isAwaitingPayment, saleBreakdown } from '../lib/engine';
 import { centsToInput, formatEuros, formatPercent, parseEuros } from '../lib/money';
 import { formatDate, todayISO } from '../lib/period';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { ORDER_LABEL } from '../lib/types';
+import type { SaleStatusChoice } from '../lib/actions';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, Sheet, Thumb, useAction, useUI } from '../ui/kit';
 import { orderBadge } from './Sales';
 
@@ -44,6 +45,8 @@ export function SaleDetail({ id }: { id: string }) {
       </div>
       <ErrorBox error={error} />
 
+      <StatusPicker saleId={id} />
+
       <section className="hero" style={{ marginTop: 14 }}>
         <div className="hero-label">Bénéfice commercial</div>
         <div className="hero-amount" style={{ fontSize: 44 }}><span className={b.profit < 0 ? 'neg' : b.profit > 0 ? 'pos' : ''}>{formatEuros(b.profit, { signed: true })}</span></div>
@@ -81,13 +84,6 @@ export function SaleDetail({ id }: { id: string }) {
             {isAwaitingPayment(ds, sale) && (
               <button className="btn btn-primary" disabled={busy} onClick={() => act(() => markPaymentReceived(id, todayISO()), 'Paiement reçu : trésorerie mise à jour')}>Paiement reçu</button>
             )}
-            {sale.orderStatus === 'confirmee' && <button className="btn btn-ghost" disabled={busy} onClick={() => act(() => setOrderStatus(id, 'expediee'), 'Vente expédiée')}>Marquer comme expédiée</button>}
-            {['confirmee', 'expediee'].includes(sale.orderStatus) && (
-              <button className="btn btn-ghost" disabled={busy} onClick={async () => {
-                if (await ui.confirm({ title: 'Clôturer la vente ?', text: "À faire quand l'acheteur a confirmé la réception et qu'aucun retour n'est plus possible.", confirmLabel: 'Marquer terminée' }))
-                  act(() => setOrderStatus(id, 'terminee'), 'Vente terminée');
-              }}>Marquer comme terminée</button>
-            )}
             {pendingRecovery && !recovered && (
               <button className="btn btn-ghost" disabled={busy} onClick={async () => {
                 if (await ui.confirm({ title: "As-tu récupéré l'article ?", text: 'Il reviendra dans ton stock et son coût sera retiré du coût des ventes.', confirmLabel: 'Oui, article récupéré' }))
@@ -96,12 +92,6 @@ export function SaleDetail({ id }: { id: string }) {
             )}
             {active && remaining > 0 && <button className="btn btn-ghost" onClick={() => setRefundOpen(true)}>Enregistrer un retour ou un remboursement</button>}
             {active && <button className="btn btn-ghost" onClick={() => go(`depense?vente=${id}`)}>Ajouter une dépense liée à cette vente</button>}
-            {active && sale.paymentStatus === 'en_attente' && refunds.length === 0 && (
-              <button className="btn btn-danger" disabled={busy} onClick={async () => {
-                if (await ui.confirm({ title: 'Annuler cette vente ?', text: "Les articles reviennent « en vente » et l'encaissement en attente est annulé. La vente reste visible dans l'historique.", confirmLabel: 'Annuler la vente', danger: true }))
-                  act(() => cancelSale(id, todayISO()), 'Vente annulée');
-              }}>Annuler la vente</button>
-            )}
           </div>
         </>
       )}
@@ -261,5 +251,45 @@ function EditSaleSheet({ saleId, onClose }: { saleId: string; onClose: () => voi
       <button className="btn btn-primary" disabled={busy} onClick={save}>Enregistrer</button>
       {!hasRefund && <button className="btn btn-danger" style={{ marginTop: 10, width: '100%' }} disabled={busy} onClick={remove}>Supprimer cette vente</button>}
     </Sheet>
+  );
+}
+
+const STATUS_CHOICES: [SaleStatusChoice, string][] = [
+  ['confirmee', 'À confirmer'],
+  ['expediee', 'Expédiée'],
+  ['terminee', 'Terminée'],
+  ['annulee', 'Annulée'],
+  ['remboursee', 'Remboursée'],
+];
+
+/** Statut de la vente, modifiable d'un toucher (dans les deux sens). */
+function StatusPicker({ saleId }: { saleId: string }) {
+  const ds = useData();
+  const ui = useUI();
+  const sale = ds.sales.find((x) => x.id === saleId)!;
+  const { error, run, busy } = useAction();
+  const current: SaleStatusChoice = ['retournee', 'remboursee'].includes(sale.orderStatus) ? 'remboursee' : sale.orderStatus === 'en_attente' ? 'confirmee' : (sale.orderStatus as SaleStatusChoice);
+  const pick = async (to: SaleStatusChoice) => {
+    if (to === current || busy) return;
+    const texts: Partial<Record<SaleStatusChoice, { title: string; text: string }>> = {
+      annulee: { title: 'Marquer comme annulée ?', text: "La vente ne compte plus dans le chiffre d'affaires ni le bénéfice ; l'article revient chez toi." },
+      remboursee: { title: 'Marquer comme remboursée ?', text: "L'acheteur est remboursé en totalité et l'article revient chez toi : la vente ne rapporte plus rien." },
+      terminee: { title: 'Marquer comme terminée ?', text: 'Le paiement est considéré comme reçu sur ton porte-monnaie Vinted.' },
+    };
+    const t = texts[to];
+    if (t && !(await ui.confirm({ ...t, confirmLabel: 'Confirmer', danger: to === 'annulee' || to === 'remboursee' }))) return;
+    const ok = await run(async () => { await changeSaleStatus(saleId, to, todayISO()); return true; });
+    if (ok) ui.toast(`Statut : ${STATUS_CHOICES.find(([k]) => k === to)![1]}`);
+  };
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div className="tiny faint" style={{ marginBottom: 6 }}>Statut (touche pour changer)</div>
+      <div className="chips" role="group" aria-label="Statut de la vente" style={{ flexWrap: 'wrap', overflow: 'visible' }}>
+        {STATUS_CHOICES.map(([k, l]) => (
+          <button key={k} className="chip" aria-pressed={current === k} disabled={busy} onClick={() => pick(k)}>{l}</button>
+        ))}
+      </div>
+      <ErrorBox error={error} />
+    </div>
   );
 }

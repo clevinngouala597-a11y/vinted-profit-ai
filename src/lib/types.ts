@@ -159,7 +159,7 @@ export type OrderStatus = 'en_attente' | 'confirmee' | 'expediee' | 'terminee' |
 
 export const ORDER_LABEL: Record<OrderStatus, string> = {
   en_attente: 'En attente',
-  confirmee: 'Confirmée',
+  confirmee: 'À confirmer',
   expediee: 'Expédiée',
   terminee: 'Terminée',
   annulee: 'Annulée',

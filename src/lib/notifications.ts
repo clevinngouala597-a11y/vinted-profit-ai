@@ -90,7 +90,7 @@ export function computeNotifications(ds: Dataset, today: ISODate): Notif[] {
       level: 'warn',
       title: `${plural(notShipped.length, 'vente confirmée', 'ventes confirmées')} sans expédition depuis 5 jours`,
       text: "Marque-les comme expédiées si c'est fait.",
-      to: 'ventes?filtre=expedier',
+      to: 'ventes?filtre=confirmer',
     });
   const notBack = ds.refunds.filter((r) => !r.itemRecovered && !ds.refunds.some((x) => x.saleId === r.saleId && x.itemRecovered) && daysBetween(r.date, today) >= 14);
   if (notBack.length)
@@ -98,7 +98,7 @@ export function computeNotifications(ds: Dataset, today: ISODate): Notif[] {
       level: 'warn',
       title: `${plural(notBack.length, 'retour', 'retours')} non récupéré${notBack.length > 1 ? 's' : ''} après 14 jours`,
       text: "L'article n'est pas encore revenu dans ton stock.",
-      to: 'ventes?filtre=retours',
+      to: 'ventes?filtre=remboursees',
     });
 
   // --- objectifs (à partir du 10e jour, quand le rythme est significatif)

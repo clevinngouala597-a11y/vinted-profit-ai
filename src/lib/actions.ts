@@ -386,6 +386,100 @@ export async function cancelSale(saleId: string, date: ISODate = todayISO()) {
 
 export const AUTO_ITEM_SOURCE = 'Créé par la synchro Vinted';
 
+export type SaleStatusChoice = 'confirmee' | 'expediee' | 'terminee' | 'annulee' | 'remboursee';
+export const MANUAL_STATUS_NOTE = 'Statut modifié à la main';
+
+/**
+ * Change le statut d'une vente dans n'importe quel sens (erreur de saisie, synchro corrigée à la main).
+ * Les effets sont recalculés : paiement, articles, trésorerie. « Remboursée » rembourse la totalité,
+ * article récupéré ; quitter « Remboursée » ou « Annulée » défait proprement ce qui avait été fait.
+ */
+export async function changeSaleStatus(saleId: string, target: SaleStatusChoice, date: ISODate = todayISO()) {
+  const db = getDb();
+  const tables = [db.sales, db.saleLines, db.items, db.refunds, db.transactions, db.inventoryMovements, db.syncedEmails, db.auditLogs];
+  await db.transaction('rw', tables, async () => {
+    const sale = await db.sales.get(saleId);
+    if (!sale) fail('Vente introuvable.');
+    const s = sale!;
+    const current: SaleStatusChoice = s.orderStatus === 'retournee' || s.orderStatus === 'remboursee' ? 'remboursee' : s.orderStatus === 'en_attente' ? 'confirmee' : (s.orderStatus as SaleStatusChoice);
+    if (current === target) return;
+    const lines = await db.saleLines.where('saleId').equals(saleId).toArray();
+    const itemIds = lines.map((l) => l.itemId);
+    const txs = await db.transactions.where('refId').equals(saleId).toArray();
+    const setItems = async (status: ItemStatus, soldAt: ISODate | null) => {
+      for (const id of itemIds) await db.items.update(id, { status, soldAt, updatedAt: now() });
+    };
+
+    // 1. défaire un remboursement
+    const refunds = await db.refunds.where('saleId').equals(saleId).toArray();
+    if (refunds.length) {
+      await db.refunds.where('saleId').equals(saleId).delete();
+      for (const t of txs) {
+        if (t.refType === 'refund' && (t.kind === 'remboursement' || t.kind === 'frais_vente')) await db.transactions.delete(t.id);
+        if (t.kind === 'vente' && / \(après remboursement\)$/.test(t.label))
+          await db.transactions.update(t.id, { amount: s.sellerRevenue, status: s.paymentStatus === 'recu' ? 'confirme' : 'en_attente', label: t.label.replace(/ \(après remboursement\)$/, '') });
+      }
+      for (const m of await db.inventoryMovements.where('itemId').anyOf(itemIds).filter((m) => m.refId === saleId && m.kind === 'retour_stock').toArray()) await db.inventoryMovements.delete(m.id);
+    }
+    // 2. défaire une annulation
+    if (s.orderStatus === 'annulee') {
+      for (const id of itemIds) {
+        const it = await db.items.get(id);
+        if (it && !SELLABLE.includes(it.status)) fail(`« ${it.name} » a été revendu entre-temps : cette vente ne peut pas être rétablie.`);
+      }
+      for (const t of txs) if (t.kind === 'vente' && t.status === 'annule') await db.transactions.update(t.id, { status: s.paymentStatus === 'recu' ? 'confirme' : 'en_attente' });
+      for (const m of await db.inventoryMovements.where('itemId').anyOf(itemIds).filter((m) => m.refId === saleId && m.kind === 'annulation_vente').toArray()) await db.inventoryMovements.delete(m.id);
+      await db.sales.update(saleId, { cancelledAt: null });
+    }
+    const fresh = (await db.sales.get(saleId))!;
+    const unpay = async () => {
+      if (fresh.paymentStatus !== 'recu') return;
+      await db.sales.update(saleId, { paymentStatus: 'en_attente' });
+      for (const t of await db.transactions.where('refId').equals(saleId).toArray())
+        if (t.kind === 'vente' && t.status === 'confirme') await db.transactions.update(t.id, { status: 'en_attente' });
+    };
+
+    // 3. appliquer le nouveau statut
+    switch (target) {
+      case 'confirmee':
+        await db.sales.update(saleId, { orderStatus: 'confirmee', shippedAt: null, closedAt: null });
+        await setItems('vendu', fresh.date);
+        break;
+      case 'expediee':
+        await db.sales.update(saleId, { orderStatus: 'expediee', shippedAt: fresh.shippedAt ?? date, closedAt: null });
+        await setItems('expedie', fresh.date);
+        break;
+      case 'terminee': {
+        await db.sales.update(saleId, { orderStatus: 'terminee', paymentStatus: 'recu', closedAt: fresh.closedAt ?? date, shippedAt: fresh.shippedAt ?? date });
+        for (const t of await db.transactions.where('refId').equals(saleId).toArray())
+          if (t.status === 'en_attente') await db.transactions.update(t.id, { status: 'confirme', date: t.kind === 'vente' ? date : t.date });
+        await setItems('termine', fresh.date);
+        break;
+      }
+      case 'annulee':
+        await unpay();
+        await db.sales.update(saleId, { orderStatus: 'annulee', cancelledAt: date, shippedAt: fresh.shippedAt, closedAt: null });
+        for (const t of await db.transactions.where('refId').equals(saleId).toArray()) if (t.kind === 'vente') await db.transactions.update(t.id, { status: 'annule' });
+        await setItems('en_vente', null);
+        for (const id of itemIds) await db.inventoryMovements.add({ id: uid(), itemId: id, date, kind: 'annulation_vente', refId: saleId, createdAt: now() });
+        break;
+      case 'remboursee': {
+        await db.sales.update(saleId, { orderStatus: 'retournee', closedAt: null });
+        const amount = fresh.sellerRevenue;
+        await db.refunds.add({ id: uid(), saleId, date, amount, itemRecovered: true, recoveredAt: date, extraCosts: 0, notes: MANUAL_STATUS_NOTE, createdAt: now() });
+        const pendingIn = (await db.transactions.where('refId').equals(saleId).toArray()).find((t) => t.kind === 'vente' && t.status === 'en_attente');
+        if (pendingIn) await db.transactions.update(pendingIn.id, { amount: 0, status: 'annule', label: `${pendingIn.label} (après remboursement)` });
+        else if (amount > 0) await db.transactions.add(tx({ date, amount: -amount, kind: 'remboursement', status: 'confirme', refType: 'refund', refId: saleId, label: 'Remboursement' }));
+        await restock(itemIds, date, saleId);
+        break;
+      }
+    }
+    // la synchro ne doit pas revenir sur un choix fait à la main
+    for (const r of await db.syncedEmails.toArray()) if (r.ref === saleId && r.kind === 'sale') await db.syncedEmails.update(r.id, { note: MANUAL_STATUS_NOTE });
+    await audit('sale', saleId, `statut → ${target} (à la main)`, date);
+  });
+}
+
 /**
  * Supprime une vente enregistrée par erreur, comme si elle n'avait jamais existé (trace gardée au journal).
  * Un article créé automatiquement pour cette vente est supprimé avec elle ; un article du stock y revient.

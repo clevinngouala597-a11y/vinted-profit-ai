@@ -13,6 +13,7 @@
  */
 import {
   AUTO_ITEM_SOURCE,
+  MANUAL_STATUS_NOTE,
   cancelSale,
   correctSale,
   findDuplicateExpenses,
@@ -256,6 +257,7 @@ async function cancelUnpaid(today: ISODate) {
   const ds = await loadDataset();
   for (const r of rows) {
     if (r.kind !== 'sale' || r.status !== 'applied' || !r.ref || closedBy.has(r.id) || daysBetween(r.date, today) < NO_PAYMENT_DAYS) continue;
+    if (r.note === MANUAL_STATUS_NOTE || r.note === AUTO_CANCEL) continue; // choix fait à la main, ou déjà annulée une fois
     const sale = ds.sales.find((x) => x.id === r.ref);
     if (!sale || !sale.notes.startsWith('Synchronisé') || sale.orderStatus === 'annulee' || sale.paymentStatus !== 'en_attente' || refunded(ds, sale.id) > 0) continue;
     await cancelSale(sale.id, today);
