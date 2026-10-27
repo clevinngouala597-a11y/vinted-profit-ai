@@ -38,6 +38,8 @@ export interface Settings {
   lastSyncAt: ISOTime | null;
   /** Bannière et son de caisse à chaque nouvelle vente. */
   saleAlert: boolean;
+  /** Synchro : tout enregistrer sans passer par « À valider » (articles inconnus créés avec un coût à compléter). */
+  autoRecord: boolean;
 }
 
 export const DEFAULT_CATEGORIES = [
@@ -123,6 +125,8 @@ export interface Item {
   notes: string;
   listingRef: string;
   photoIds: string[];
+  /** Article créé automatiquement par la synchro : son prix d'achat (0 en attendant) reste à indiquer. */
+  costPending?: boolean;
   createdAt: ISOTime;
   updatedAt: ISOTime;
 }

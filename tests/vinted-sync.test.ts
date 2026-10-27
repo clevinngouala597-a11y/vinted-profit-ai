@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { VPDatabase, getDb, setDb } from '../src/lib/db';
-import { defaultSettings, loadDataset, recordPurchase, recordSale, saveSettings } from '../src/lib/actions';
+import { completeItemCost, defaultSettings, loadDataset, recordPurchase, recordSale, saveSettings } from '../src/lib/actions';
 import { cashState, periodMetrics, saleBreakdown } from '../src/lib/engine';
 import { dismissSynced, fetchVintedEmails, guessCategory, resolveSale, syncNow, unpaidInboxSales } from '../src/lib/vinted/sync';
 import type { RawEmail } from '../src/lib/vinted/parse';
@@ -24,7 +24,7 @@ let n = 0;
 beforeEach(async () => {
   setDb(new VPDatabase(`sync-${++n}`));
   inbox = [];
-  await saveSettings({ ...defaultSettings('2026-09-01'), onboarded: true, initialCash: 10000, syncUrl: 'https://script.google.com/macros/s/abc/exec', syncToken: 'SECRET' });
+  await saveSettings({ ...defaultSettings('2026-09-01'), onboarded: true, initialCash: 10000, syncUrl: 'https://script.google.com/macros/s/abc/exec', syncToken: 'SECRET', autoRecord: false });
 });
 
 const buy = (name: string, price: number, date = '2026-09-05') =>
@@ -190,6 +190,65 @@ describe('Article revendu plusieurs fois (annulations, remboursements)', () => {
     expect(first).toMatchObject({ orderStatus: 'annulee', cancelledAt: '2026-07-03' });
     expect(second).toMatchObject({ paymentStatus: 'recu', orderStatus: 'terminee', shippedAt: '2026-07-13', sellerRevenue: 3600 });
     expect(saleBreakdown(ds, second).profit).toBe(3000);
+  });
+});
+
+describe('Mode automatique (sans « À valider »)', () => {
+  const T = 'Pantalon Sarouel Écru Drape à la Taille Style Bohème Chic - Taille L';
+
+  it('tout est enregistré seul : articles créés, ventes remboursées non comptées', async () => {
+    await saveSettings({ autoRecord: true, syncSince: '2026-07-01' });
+    inbox = [
+      sold('s1', '2026-07-31T06:15:00Z', T, '40,00'), // remboursée, sans e-mail
+      sold('s2', '2026-08-01T16:06:00Z', T, '35,00'), // remboursée, sans e-mail
+      sold('s4', '2026-08-07T12:13:00Z', T, '35,00'),
+      done('d4', '2026-08-13T15:28:00Z', T, '35,00'),
+      sold('s5', '2026-08-22T12:58:00Z', T, '30,00'),
+      done('d5', '2026-08-31T15:27:00Z', T, '30,00'),
+      done('d0', '2026-07-05T10:00:00Z', 'Veste en jean brut à brandebourgs Y2K - Taille L', '30,00'), // vente d'avant la synchro
+      sold('s9', '2026-10-04T00:32:00Z', 'Montre argentée homme/femme - cadran effet CD multicolore', '50,00'), // en cours (23 jours)
+    ];
+    const r = await syncNow(fakeScript, '2026-10-27');
+    expect(r.inbox).toBe(0);
+    let ds = await loadDataset();
+    expect(ds.sales).toHaveLength(4);
+    const byDate = Object.fromEntries(ds.sales.map((x) => [x.date, x]));
+    expect(byDate['2026-08-07']).toMatchObject({ paymentStatus: 'recu', closedAt: '2026-08-13', sellerRevenue: 3500 });
+    expect(byDate['2026-08-22']).toMatchObject({ paymentStatus: 'recu', closedAt: '2026-08-31', sellerRevenue: 3000 });
+    expect(byDate['2026-07-05']).toMatchObject({ paymentStatus: 'recu', orderStatus: 'terminee', sellerRevenue: 3000 });
+    expect(byDate['2026-10-04']).toMatchObject({ paymentStatus: 'en_attente', sellerRevenue: 5000 });
+    expect(ds.items.filter((i) => i.costPending)).toHaveLength(4);
+    expect(periodMetrics(ds, '2026-07-01', '2026-10-31').revenue).toBe(3500 + 3000 + 3000 + 5000);
+
+    // prix d'achat indiqué après coup : bénéfice et trésorerie justes
+    const pant = ds.items.find((i) => i.id === ds.saleLines.find((l) => l.saleId === byDate['2026-08-07'].id)!.itemId)!;
+    const cashBefore = cashState(ds).balance;
+    await completeItemCost(pant.id, 800);
+    ds = await loadDataset();
+    expect(saleBreakdown(ds, ds.sales.find((x) => x.date === '2026-08-07')!).profit).toBe(2700);
+    expect(cashState(ds).balance).toBe(cashBefore - 800);
+    expect(ds.items.find((i) => i.id === pant.id)!.costPending).toBe(false);
+
+    // 30 jours sans paiement : la montre est annulée automatiquement ; si le paiement arrive ensuite, elle est rétablie
+    await syncNow(fakeScript, '2026-11-04');
+    ds = await loadDataset();
+    expect(ds.sales.find((x) => x.date === '2026-10-04')!.orderStatus).toBe('annulee');
+    inbox = [...inbox, done('d9', '2026-11-05T10:00:00Z', 'Montre argentée homme/femme - cadran effet CD multicolore', '50,00')];
+    await saveSettings({ lastSyncAt: null });
+    await syncNow(fakeScript, '2026-11-05');
+    ds = await loadDataset();
+    const montres = ds.sales.filter((x) => x.date === '2026-10-04');
+    expect(montres.map((x) => x.orderStatus).sort()).toEqual(['annulee', 'terminee']);
+    expect(periodMetrics(ds, '2026-10-01', '2026-10-31').revenue).toBe(5000);
+  });
+
+  it('les opérations déjà « À valider » sont reprises quand on active le mode automatique', async () => {
+    await saveSettings({ syncSince: '2026-10-01' });
+    inbox = [sold('a', '2026-10-20T10:00:00Z', 'Robe longue rose - Taille S', '80,00')];
+    expect((await syncNow(fakeScript, '2026-10-27')).inbox).toBe(1);
+    await saveSettings({ autoRecord: true, lastSyncAt: null });
+    expect((await syncNow(fakeScript, '2026-10-27')).inbox).toBe(0);
+    expect((await loadDataset()).sales).toHaveLength(1);
   });
 });
 

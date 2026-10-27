@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
-import { saveSettings } from '../lib/actions';
+import { completeItemCost, saveSettings } from '../lib/actions';
 import { getDb } from '../lib/db';
 import { formatEuros, parseEuros } from '../lib/money';
 import { formatDate, todayISO } from '../lib/period';
@@ -101,6 +101,10 @@ export function VintedSyncScreen() {
             <input type="date" className="input" value={since} max={todayISO()} onChange={(e) => { setSince(e.target.value); if (e.target.value) saveSettings({ syncSince: e.target.value }); }} />
           </Field>
           <div style={{ marginTop: 4 }}>
+            <label className="check" style={{ marginBottom: 10 }}>
+              <input type="checkbox" checked={s.autoRecord !== false} onChange={(e) => run(async () => { await saveSettings({ autoRecord: e.target.checked }); if (e.target.checked) { const r = await syncNow(); setResult(syncSummary(r)); } })} />
+              <span><b>Tout enregistrer automatiquement</b><br /><span className="small muted">Sans confirmation : un article vendu qui n'est pas dans ton stock est créé tout seul (tu pourras ajouter son prix d'achat plus tard). Une vente sans paiement Vinted après {NO_PAYMENT_DAYS} jours n'est pas comptée.</span></span>
+            </label>
             <label className="check" style={{ marginBottom: 10 }}>
               <input type="checkbox" checked={s.saleAlert !== false} onChange={(e) => saveSettings({ saleAlert: e.target.checked })} />
               <span><b>Bannière et son « ka-ching » à chaque vente</b><br /><span className="small muted">Dès qu'une nouvelle vente arrive à l'ouverture de l'appli. Le son suit le mode silencieux de ton iPhone.</span></span>
@@ -203,6 +207,60 @@ function ScriptPreview({ token, open }: { token: string; open: boolean }) {
       <summary className="small muted" style={{ cursor: 'pointer' }}>Voir le script</summary>
       <textarea className="input" readOnly value={code} style={{ marginTop: 8, minHeight: 180, fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }} onFocus={(e) => e.currentTarget.select()} />
     </details>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Prix d'achat à compléter
+// ---------------------------------------------------------------------------
+
+export function MissingCosts() {
+  const ds = useData();
+  const items = ds.items.filter((i) => i.costPending).sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+  return (
+    <>
+      <PageHeader title="Prix d'achat à indiquer" sub="Articles créés par la synchro Vinted" backTo="" />
+      {items.length === 0 ? (
+        <Empty title="Tout est complet" text="Tous tes articles ont un prix d'achat : ton bénéfice est exact." action={<button className="btn btn-ghost" onClick={() => go('')}>Accueil</button>} />
+      ) : (
+        <>
+          <p className="small muted">Tant que le prix d'achat n'est pas indiqué, il compte pour 0 € : le bénéfice affiché est trop haut. Mets 0 si l'article t'appartenait déjà.</p>
+          {items.map((i) => <CostRow key={i.id} itemId={i.id} />)}
+        </>
+      )}
+    </>
+  );
+}
+
+function CostRow({ itemId }: { itemId: string }) {
+  const ds = useData();
+  const ui = useUI();
+  const item = ds.items.find((i) => i.id === itemId)!;
+  const line = ds.saleLines.filter((l) => l.itemId === itemId).at(-1);
+  const sale = line ? ds.sales.find((s) => s.id === line.saleId) : undefined;
+  const [cost, setCost] = useState('');
+  const { error, run, busy } = useAction();
+  const save = () => run(async () => {
+    const c = parseEuros(cost);
+    if (c === null || c < 0) throw new Error("Indique ce que t'a coûté l'article (0 si c'était à toi).");
+    await completeItemCost(itemId, c);
+    ui.toast('Prix enregistré');
+  });
+  return (
+    <div className="card" style={{ marginBottom: 10 }}>
+      <div style={{ fontWeight: 800 }}>{item.name}</div>
+      <div className="small muted" style={{ margin: '2px 0 8px' }}>
+        {sale ? <>Vendu le {formatDate(sale.date)} · {formatEuros(sale.sellerRevenue)}{sale.orderStatus === 'annulee' ? ' (annulée)' : ''}</> : 'En stock'}
+      </div>
+      <ErrorBox error={error} />
+      <div className="cols" style={{ alignItems: 'end' }}>
+        <Field label="Prix d'achat"><MoneyInput value={cost} onChange={setCost} /></Field>
+        <button className="btn btn-primary" style={{ marginBottom: 12 }} disabled={busy || !cost.trim()} onClick={save}>OK</button>
+      </div>
+      {sale && cost.trim() && parseEuros(cost) !== null && sale.orderStatus !== 'annulee' && (
+        <p className="small" style={{ margin: '-4px 0 0' }}>Bénéfice : <b className={sale.sellerRevenue - cents(cost) < 0 ? 'neg' : 'pos'}>{formatEuros(sale.sellerRevenue - cents(cost), { signed: true })}</b></p>
+      )}
+    </div>
   );
 }
 

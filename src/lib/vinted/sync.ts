@@ -143,7 +143,19 @@ export function pairEvents(rows: SyncedEmail[]): Pairing {
 }
 
 /** Une vente sans paiement ni annulation depuis ce nombre de jours a sans doute été annulée ou remboursée. */
-export const NO_PAYMENT_DAYS = 21;
+export const NO_PAYMENT_DAYS = 30;
+const AUTO_CANCEL = `Annulée automatiquement : aucun paiement Vinted après ${NO_PAYMENT_DAYS} jours`;
+const SKIPPED = `Non comptée : aucun paiement Vinted après ${NO_PAYMENT_DAYS} jours (vente remboursée ou annulée)`;
+
+/** Crée l'article vendu quand il n'est pas dans le stock (mode automatique) : prix d'achat à compléter. */
+async function autoItem(title: string, date: ISODate): Promise<string> {
+  const { itemIds } = await recordPurchase({
+    date, source: 'Créé par la synchro Vinted', commonFees: 0, lotPrice: null,
+    notes: "Article créé automatiquement à partir d'un e-mail Vinted : indique son prix d'achat.",
+    lines: [{ name: title.replace(/\s*[-–]\s*Taille\s+\S+$/i, '').trim() || title, category: guessCategory(title), price: 0, targetPrice: null, status: 'en_vente', costPending: true }],
+  });
+  return itemIds[0];
+}
 const VENTE_ECARTEE = 'Vente écartée : suite ignorée';
 
 const refunded = (ds: Dataset, saleId: string) => sum(ds.refunds.filter((r) => r.saleId === saleId).map((r) => r.amount));
@@ -202,9 +214,14 @@ type Outcome = { status: SyncedEmail['status']; ref?: string | null; note: strin
 const ORDER: Record<VintedEvent['kind'], number> = { purchase: 0, sale: 1, shipped: 2, cancelled: 3, completed: 4, invoice: 5, purchase_refund: 6 };
 
 /** Applique tout ce qui peut l'être. Renvoie le résumé de ce qui a été fait. */
-export async function processPending(_today: ISODate = new Date().toISOString().slice(0, 10)) {
+export async function processPending(today: ISODate = new Date().toISOString().slice(0, 10)) {
   const db = getDb();
-  const pending = (await db.syncedEmails.where('status').equals('waiting').toArray()).sort(
+  const auto = (await loadDataset()).settings.autoRecord !== false;
+  // en mode automatique, ce qui attendait dans « À valider » est repris
+  const statuses = auto ? ['waiting', 'inbox'] : ['waiting'];
+  const pending = (await db.syncedEmails.where('status').anyOf(statuses).toArray())
+    .filter((r) => r.status === 'waiting' || r.kind === 'sale' || r.kind === 'completed')
+    .sort(
     (a, b) => a.date.localeCompare(b.date) || ORDER[(a.event as VintedEvent).kind] - ORDER[(b.event as VintedEvent).kind],
   );
   const summary = { applied: 0, inbox: 0, waiting: 0 };
@@ -212,7 +229,7 @@ export async function processPending(_today: ISODate = new Date().toISOString().
     const ev = row.event as VintedEvent;
     let out: Outcome;
     try {
-      out = await applyEvent(row, ev);
+      out = await applyEvent(row, ev, today, auto);
     } catch (e) {
       out = { status: 'inbox', note: e instanceof Error ? e.message : 'Erreur inattendue' };
     }
@@ -226,18 +243,39 @@ export async function processPending(_today: ISODate = new Date().toISOString().
     else if (out.status === 'inbox') summary.inbox++;
     else if (out.status === 'waiting') summary.waiting++;
   }
+  if (auto) await cancelUnpaid(today);
   return summary;
 }
 
-async function applyEvent(row: SyncedEmail, ev: VintedEvent): Promise<Outcome> {
+/** Ventes créées par la synchro restées sans paiement ni annulation après NO_PAYMENT_DAYS jours : annulées. */
+async function cancelUnpaid(today: ISODate) {
+  const db = getDb();
+  const rows = await db.syncedEmails.toArray();
+  const { closedBy } = pairEvents(rows);
   const ds = await loadDataset();
+  for (const r of rows) {
+    if (r.kind !== 'sale' || r.status !== 'applied' || !r.ref || closedBy.has(r.id) || daysBetween(r.date, today) < NO_PAYMENT_DAYS) continue;
+    const sale = ds.sales.find((x) => x.id === r.ref);
+    if (!sale || !sale.notes.startsWith('Synchronisé') || sale.orderStatus === 'annulee' || sale.paymentStatus !== 'en_attente' || refunded(ds, sale.id) > 0) continue;
+    await cancelSale(sale.id, today);
+    await db.syncedEmails.update(r.id, { note: AUTO_CANCEL });
+  }
+}
+
+async function applyEvent(row: SyncedEmail, ev: VintedEvent, today: ISODate, auto: boolean): Promise<Outcome> {
+  const ds = await loadDataset();
+  const pairing = pairEvents(await getDb().syncedEmails.toArray());
   // vente concernée par un paiement / une annulation / une expédition, d'après les e-mails
   let linked: Sale | null | undefined; // undefined : aucun e-mail de vente ne correspond
+  let linkedRow: SyncedEmail | undefined;
   if (FOLLOW_UPS.includes(ev.kind)) {
-    const saleRow = pairEvents(await getDb().syncedEmails.toArray()).saleOf.get(row.id);
-    if (saleRow) {
-      if (saleRow.status !== 'applied') return { status: 'waiting', note: 'En attente de la vente correspondante (à valider)' };
-      linked = ds.sales.find((s) => s.id === saleRow.ref) ?? null;
+    linkedRow = pairing.saleOf.get(row.id);
+    if (linkedRow) {
+      if (linkedRow.status !== 'applied') {
+        if (linkedRow.status === 'ignored') return { status: 'ignored', note: 'Vente non comptée' };
+        return { status: 'waiting', note: 'En attente de la vente correspondante (à valider)' };
+      }
+      linked = ds.sales.find((s) => s.id === linkedRow!.ref) ?? null;
     }
   }
   switch (ev.kind) {
@@ -245,19 +283,37 @@ async function applyEvent(row: SyncedEmail, ev: VintedEvent): Promise<Outcome> {
       // déjà saisie à la main (même article, à quelques jours près) ?
       const manual = findSale(ds, ev.title, (s) => s.orderStatus !== 'annulee' && Math.abs(daysBetween(s.date, ev.date)) <= 3);
       if (manual) return { status: 'applied', ref: manual.id, note: 'Vente déjà enregistrée' };
+      // ni paiement ni annulation depuis longtemps : vente remboursée (Vinted n'envoie pas toujours d'e-mail)
+      if (auto && !pairing.closedBy.has(row.id) && daysBetween(ev.date, today) >= NO_PAYMENT_DAYS) return { status: 'ignored', note: SKIPPED };
       const item = findStockItem(ds, ev.title);
-      if (!item) return { status: 'inbox', note: "Aucun article du stock ne correspond : indique l'article vendu." };
+      if (!item && !auto) return { status: 'inbox', note: "Aucun article du stock ne correspond : indique l'article vendu." };
+      const itemId = item?.id ?? (await autoItem(ev.title, ev.date));
       const saleId = await recordSale({
-        date: ev.date, itemIds: [item.id], listedPrice: ev.amount, discount: 0, sellerRevenue: ev.amount,
+        date: ev.date, itemIds: [itemId], listedPrice: ev.amount, discount: 0, sellerRevenue: ev.amount,
         platformFees: 0, packagingCost: 0, otherCosts: 0, paymentStatus: 'en_attente', notes: NOTE(ev.date),
       });
-      if (!item.listingRef) await updateItem(item.id, { listingRef: ev.title });
-      return { status: 'applied', ref: saleId, note: `Vente enregistrée pour « ${item.name} »` };
+      if (!item?.listingRef) await updateItem(itemId, { listingRef: ev.title });
+      return { status: 'applied', ref: saleId, note: item ? `Vente enregistrée pour « ${item.name} »` : "Vente enregistrée · article créé, prix d'achat à indiquer" };
     }
 
     case 'completed': {
       if (linked) {
-        if (linked.orderStatus === 'annulee') return { status: 'ignored', note: 'Vente annulée dans l’application' };
+        if (linked.orderStatus === 'annulee') {
+          // paiement arrivé après une annulation automatique : la vente est réenregistrée, payée
+          const itemId = ds.saleLines.find((l) => l.saleId === linked!.id)?.itemId;
+          const item = ds.items.find((i) => i.id === itemId);
+          if (linkedRow?.note === AUTO_CANCEL && item && SELLABLE.includes(item.status)) {
+            const saleId = await recordSale({
+              date: linked.date, itemIds: [item.id], listedPrice: ev.amount ?? linked.sellerRevenue, discount: 0, sellerRevenue: ev.amount ?? linked.sellerRevenue,
+              platformFees: 0, packagingCost: 0, otherCosts: 0, paymentStatus: 'en_attente', notes: NOTE(linked.date),
+            });
+            await markPaymentReceived(saleId, ev.date);
+            await setOrderStatus(saleId, 'terminee', ev.date);
+            await getDb().syncedEmails.update(linkedRow.id, { ref: saleId, note: 'Vente rétablie : paiement reçu après annulation automatique' });
+            return { status: 'applied', ref: saleId, note: 'Paiement reçu : vente rétablie' };
+          }
+          return { status: 'ignored', note: 'Vente annulée dans l’application' };
+        }
         if (linked.paymentStatus === 'recu') return { status: 'applied', ref: linked.id, note: 'Paiement déjà enregistré' };
       }
       const open = linked ?? findSale(ds, ev.title, (s) => s.orderStatus !== 'annulee' && s.paymentStatus === 'en_attente' && s.date <= ev.date);
@@ -271,7 +327,21 @@ async function applyEvent(row: SyncedEmail, ev: VintedEvent): Promise<Outcome> {
       }
       const paid = findSale(ds, ev.title, (s) => s.orderStatus !== 'annulee' && s.paymentStatus === 'recu' && Math.abs(daysBetween(s.date, ev.date)) <= 30);
       if (paid) return { status: 'applied', ref: paid.id, note: 'Paiement déjà enregistré' };
-      return { status: 'inbox', note: 'Vente finalisée sans vente enregistrée : indique l’article vendu.' };
+      if (!auto) return { status: 'inbox', note: 'Vente finalisée sans vente enregistrée : indique l’article vendu.' };
+      {
+        // vente antérieure à la synchro : enregistrée directement, payée (article du stock ou créé)
+        const item = findStockItem(ds, ev.title);
+        const itemId = item?.id ?? (await autoItem(ev.title, ev.date));
+        const amount = ev.amount ?? 0;
+        const saleId = await recordSale({
+          date: ev.date, itemIds: [itemId], listedPrice: amount, discount: 0, sellerRevenue: amount,
+          platformFees: 0, packagingCost: 0, otherCosts: 0, paymentStatus: 'en_attente', notes: NOTE(ev.date),
+        });
+        await markPaymentReceived(saleId, ev.date);
+        await setOrderStatus(saleId, 'terminee', ev.date);
+        if (!item?.listingRef) await updateItem(itemId, { listingRef: ev.title });
+        return { status: 'applied', ref: saleId, note: item ? 'Vente et paiement enregistrés' : "Vente et paiement enregistrés · article créé, prix d'achat à indiquer" };
+      }
     }
 
     case 'shipped': {

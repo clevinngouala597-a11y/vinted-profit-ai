@@ -62,6 +62,7 @@ export function defaultSettings(today = todayISO()): Settings {
     syncSince: null,
     lastSyncAt: null,
     saleAlert: true,
+    autoRecord: true,
   };
 }
 
@@ -142,6 +143,8 @@ export interface PurchaseLineInput {
   minPrice?: Cents | null;
   status?: ItemStatus;
   photoIds?: string[];
+  /** prix d'achat inconnu pour l'instant (article créé par la synchro) */
+  costPending?: boolean;
 }
 
 export interface PurchaseInput {
@@ -215,6 +218,7 @@ export async function recordPurchase(input: PurchaseInput): Promise<{ purchaseId
         notes: '',
         listingRef: '',
         photoIds: l.photoIds ?? [],
+        ...(l.costPending ? { costPending: true } : {}),
         createdAt: t,
         updatedAt: t,
       });
@@ -645,6 +649,39 @@ export async function updateItem(id: string, patch: Partial<Item>) {
   await db.items.update(id, { ...clean, updatedAt: now() });
   const changed = Object.keys(clean).filter((k) => (cur as unknown as Record<string, unknown>)[k] !== (clean as Record<string, unknown>)[k]);
   if (changed.length) await audit('item', id, 'modification', changed.join(', '));
+}
+
+/**
+ * Indique le prix d'achat d'un article créé par la synchro (même s'il est déjà vendu).
+ * Tout est recalculé comme si le prix avait été saisi dès l'achat : achat, ligne d'achat,
+ * sortie de trésorerie à la date d'achat, et coût de revient des ventes de l'article.
+ */
+export async function completeItemCost(id: string, cost: Cents) {
+  nonNeg(cost, "Le prix d'achat");
+  const db = getDb();
+  await db.transaction('rw', [db.items, db.purchases, db.purchaseLines, db.saleLines, db.transactions, db.auditLogs], async () => {
+    const it = await db.items.get(id);
+    if (!it) fail('Article introuvable.');
+    const before = it!.purchasePrice + it!.directFees;
+    await db.items.update(id, { purchasePrice: cost, directFees: 0, costPending: false, updatedAt: now() });
+    if (it!.purchaseId) {
+      const p = await db.purchases.get(it!.purchaseId);
+      if (p) {
+        const itemsTotal = p.itemsTotal - it!.purchasePrice + cost;
+        const commonFees = p.commonFees - it!.directFees;
+        await db.purchases.update(p.id, { itemsTotal, commonFees });
+        const line = await db.purchaseLines.where('itemId').equals(id).first();
+        if (line) await db.purchaseLines.update(line.id, { price: cost, allocatedFees: 0 });
+        const total = itemsTotal + commonFees;
+        const ptx = (await db.transactions.where('refId').equals(p.id).toArray()).find((x) => x.refType === 'purchase' && x.kind === 'achat');
+        if (ptx) await db.transactions.update(ptx.id, { amount: -total });
+        else if (total > 0)
+          await db.transactions.add(tx({ date: p.date, amount: -total, kind: 'achat', status: 'confirme', refType: 'purchase', refId: p.id, label: `Achat · ${p.source || it!.name}` }));
+      }
+    }
+    for (const l of await db.saleLines.where('itemId').equals(id).toArray()) await db.saleLines.update(l.id, { cogs: cost });
+    await audit('item', id, "prix d'achat indiqué", `${before} c → ${cost} c`);
+  });
 }
 
 /**

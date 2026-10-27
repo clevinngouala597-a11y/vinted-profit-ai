@@ -149,3 +149,13 @@ Disponible pour acheter  = trésorerie confirmée − sorties en attente − ré
   - un e-mail n'est lu qu'une fois ;
   - une seule synchro tourne à la fois ;
   - les e-mails antérieurs à la date choisie ne sont pas importés.
+
+### Mode automatique (par défaut)
+
+- **Aucune confirmation demandée.** Un article vendu qui n'est pas dans le stock est créé tout seul, avec un prix d'achat à 0 € marqué « à indiquer ».
+- **Tant que ce prix n'est pas indiqué**, le bénéfice est surestimé. L'accueil affiche le nombre d'articles concernés. Une fois le prix saisi, tout est recalculé comme s'il avait été saisi dès l'achat : achat, sortie de trésorerie à la date d'achat, coût de revient de la vente.
+- **Ventes sans paiement.** Une vente sans « transaction finalisée » ni annulation après 30 jours est considérée comme remboursée : Vinted n'envoie pas toujours d'e-mail dans ce cas.
+  - Lors de l'import de l'historique, elle n'est pas comptée.
+  - Si elle a déjà été enregistrée, elle est annulée automatiquement.
+  - Si le paiement arrive malgré tout plus tard, la vente est rétablie.
+- **Rattachement des e-mails.** Chaque paiement, annulation ou expédition est rattaché à la dernière vente ouverte du même article. Un article revendu plusieurs fois est donc suivi correctement.

@@ -26,6 +26,7 @@ export function Home() {
   const p = usePeriod();
   const [menu, setMenu] = useState(false);
   const notifs = useNotifications();
+  const missingCosts = ds.items.filter((i) => i.costPending).length;
   const toValidate = useLiveQuery(() => getDb().syncedEmails.where('status').equals('inbox').count(), []) ?? 0;
 
   const entries = useMemo(() => plEntries(ds), [ds]);
@@ -62,6 +63,11 @@ export function Home() {
 
       <PeriodPicker p={p} />
 
+      {missingCosts > 0 && (
+        <button className="alert warn" style={{ width: '100%', border: 0, marginTop: 12, textAlign: 'left', cursor: 'pointer' }} onClick={() => go('couts')}>
+          <span><b>{missingCosts} article{missingCosts > 1 ? 's' : ''} sans prix d'achat</b> — ajoute-le{missingCosts > 1 ? 's' : ''} pour que le bénéfice soit juste.</span>
+        </button>
+      )}
       {toValidate > 0 && (
         <button className="alert warn" style={{ width: '100%', border: 0, marginTop: 12, textAlign: 'left', cursor: 'pointer' }} onClick={() => go('a-valider')}>
           <span><b>{toValidate} opération{toValidate > 1 ? 's' : ''} Vinted à valider</b> — indique l'article vendu pour que le bénéfice soit juste.</span>
