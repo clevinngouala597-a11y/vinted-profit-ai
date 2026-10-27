@@ -30,6 +30,7 @@ export function VintedSyncScreen() {
   const [url, setUrl] = useState(s.syncUrl);
   const [since, setSince] = useState(s.syncSince ?? s.trackingStart);
   const [result, setResult] = useState<string | null>(null);
+  const [key, setKey] = useState('');
   const { error, run, busy } = useAction();
   const counts = useLiveQuery(async () => {
     const rows = await getDb().syncedEmails.toArray();
@@ -57,7 +58,9 @@ export function VintedSyncScreen() {
   const activate = () => run(async () => {
     const u = url.trim();
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec/.test(u)) throw new Error("Colle l'adresse de l'application Web : elle commence par https://script.google.com/macros/s/ et se termine par /exec.");
-    await saveSettings({ syncUrl: u, syncSince: since });
+    const k = key.trim().replace(/^'|'$/g, '');
+    if (k && !/^[A-Za-z0-9_-]{20,}$/.test(k)) throw new Error("La clé secrète doit être la suite de lettres et chiffres écrite après « const CLE = » dans le script.");
+    await saveSettings({ syncUrl: u, syncSince: since, ...(k ? { syncToken: k } : {}) });
     const r = await syncNow();
     setResult(syncSummary(r));
     setSetup(false);
@@ -160,6 +163,12 @@ export function VintedSyncScreen() {
             <Field label="Importer les e-mails à partir du" hint="Avant cette date, rien n'est importé (évite de recréer d'anciennes ventes).">
               <input type="date" className="input" value={since} max={todayISO()} onChange={(e) => setSince(e.target.value)} />
             </Field>
+            <details style={{ marginBottom: 12 }}>
+              <summary className="small muted" style={{ cursor: 'pointer' }}>Script reçu autrement (fichier, ordinateur) ?</summary>
+              <Field label="Clé secrète du script" hint="Recopie la clé écrite après « const CLE = » dans ton script. Laisse vide si tu as utilisé « Copier le script » ci-dessus.">
+                <input className="input" value={key} onChange={(e) => setKey(e.target.value)} placeholder="ex. Zk3…" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+              </Field>
+            </details>
             <button className="btn btn-primary" onClick={activate} disabled={busy || !s.syncToken}>{busy ? 'Test en cours…' : 'Tester et activer'}</button>
           </Step>
         </>
