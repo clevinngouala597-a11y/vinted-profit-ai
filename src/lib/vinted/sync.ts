@@ -58,7 +58,7 @@ export async function fetchVintedEmails(url: string, token: string, since: ISODa
   try {
     res = await fetcher(u, { method: 'GET', redirect: 'follow' });
   } catch {
-    throw new SyncError('Impossible de joindre le script Google. Vérifie ta connexion internet.');
+    throw new SyncError('Impossible de joindre le script Google : pas de connexion internet, ou limite Gmail du jour atteinte (elle se réinitialise en 24 h).');
   }
   if (!res.ok) throw new SyncError(`Le script Google a répondu avec une erreur (${res.status}). Vérifie qu'il est déployé en « Application Web » accessible à « Tout le monde ».`);
   let body: { error?: string; messages?: RawEmail[]; version?: number; notifications?: boolean; sujet?: string };
@@ -171,6 +171,8 @@ async function autoItem(title: string, date: ISODate): Promise<string> {
 const VENTE_ECARTEE = 'Vente écartée : suite ignorée';
 
 const refunded = (ds: Dataset, saleId: string) => sum(ds.refunds.filter((r) => r.saleId === saleId).map((r) => r.amount));
+const INCREMENTAL_DAYS = 3;
+const maxDate = (a: ISODate, b: ISODate) => (a > b ? a : b);
 const addDays = (d: ISODate, n: number) => new Date(Date.parse(d) + n * 86_400_000).toISOString().slice(0, 10);
 const daysBetween = (a: ISODate, b: ISODate) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
 
@@ -513,7 +515,12 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
   const { syncUrl, syncToken } = ds.settings;
   if (!syncUrl || !syncToken) throw new SyncError('La synchronisation Gmail n’est pas encore configurée.');
   const since = ds.settings.syncSince ?? ds.settings.trackingStart;
-  const reply = await fetchVintedEmails(syncUrl, syncToken, since, fetcher);
+  // Gmail limite le nombre de lectures par jour : après une première lecture complète,
+  // seuls les e-mails des derniers jours sont relus (les plus anciens sont déjà enregistrés).
+  const incremental = ds.settings.lastSyncAt && ds.settings.syncedFrom === since;
+  const from = incremental ? maxDate(since, addDays(ds.settings.lastSyncAt!.slice(0, 10), -INCREMENTAL_DAYS)) : since;
+  const reply = await fetchVintedEmails(syncUrl, syncToken, from, fetcher);
+  if (!incremental) await saveSettings({ syncedFrom: since });
   const emails = reply.messages;
   if (reply.version !== ds.settings.scriptVersion || reply.notifications !== ds.settings.scriptNotifications || (reply.topic && reply.topic !== ds.settings.ntfyTopic))
     await saveSettings({ scriptVersion: reply.version, scriptNotifications: reply.notifications, ...(reply.topic ? { ntfyTopic: reply.topic } : {}) });

@@ -68,6 +68,7 @@ export function defaultSettings(today = todayISO()): Settings {
     scriptVersion: null,
     scriptNotifications: false,
     driveBackupAt: null,
+    syncedFrom: null,
   };
 }
 

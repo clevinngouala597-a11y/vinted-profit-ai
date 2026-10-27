@@ -95,7 +95,8 @@ function verifierVentes() {
   const vus = {};
   deja.forEach(function (id) { vus[id] = true; });
   const nouveaux = [];
-  GmailApp.search('from:(vinted.fr OR vinted.com) subject:(vendu OR finalisée) newer_than:2d', 0, 30).forEach(function (fil) {
+  // peu de lectures Gmail : seulement les fils du jour (Gmail limite le nombre de lectures quotidiennes)
+  GmailApp.search('from:(vinted.fr OR vinted.com) subject:(vendu OR finalisée) newer_than:1d', 0, 15).forEach(function (fil) {
     fil.getMessages().forEach(function (m) { if (!vus[m.getId()]) nouveaux.push(m); });
   });
   nouveaux.sort(function (a, b) { return a.getDate() - b.getDate(); }).forEach(function (m) {

@@ -49,6 +49,8 @@ export interface Settings {
   /** Le script vérifie Gmail toutes les 5 minutes (notifications actives). */
   scriptNotifications: boolean;
   driveBackupAt: ISOTime | null;
+  /** Date « à partir du » de la dernière lecture complète de Gmail (ensuite : lecture des derniers jours seulement). */
+  syncedFrom: ISODate | null;
 }
 
 export const DEFAULT_CATEGORIES = [
