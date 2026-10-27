@@ -69,8 +69,22 @@ Disponible pour acheter  = trésorerie confirmée − sorties en attente − ré
 - Un remboursement avant paiement réduit la somme attendue, sans créer de second mouvement.
 - La valeur du stock n'est jamais ajoutée à la trésorerie.
 
+## Objectifs
+
+- Chaque mois a ses propres objectifs.
+  - Un mois sans objectifs reprend ceux du dernier mois renseigné, puis, à défaut, la configuration initiale (bénéfice mensuel, réserve).
+  - Modifier un mois ne change jamais les mois passés.
+- **Objectifs minimums** (chiffre d'affaires, bénéfice, ventes, marge, trésorerie) : « reste » = cible − réalisé.
+- **Objectifs maximums** (budget d'achat, stock) : « dépassé » dès que le réalisé dépasse la cible.
+- **Estimation de fin de mois** : réalisé ÷ jours écoulés × jours du mois. Elle n'est affichée qu'à partir du 7e jour du mois en cours, et pas pour la marge, le stock ni la trésorerie (ce ne sont pas des cumuls).
+
 ## Corrections et traçabilité
 
 - Toute opération est enregistrée dans le journal (`auditLogs`).
 - Une correction de coût met à jour l'achat et crée un **ajustement de trésorerie**. Rien n'est supprimé silencieusement.
+- **Correction d'une vente** (montants ou date) : la répartition par article est recalculée avec les mêmes poids.
+  - Si le paiement est en attente : la somme attendue est modifiée.
+  - Sinon : la différence passe par un mouvement d'ajustement daté du jour de la correction.
+  - Une raison est obligatoire, et l'avant/après est inscrit au journal.
+  - Le montant encaissé ne peut pas descendre sous le total déjà remboursé.
 - Les ventes annulées et remboursées restent consultables. Une dépense annulée laisse son mouvement de trésorerie marqué « annulé » et une trace dans le journal.

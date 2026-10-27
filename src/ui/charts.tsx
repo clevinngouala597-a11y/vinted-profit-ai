@@ -86,3 +86,78 @@ export function BarList({ rows, valueOf, format }: {
     </div>
   );
 }
+
+/** Courbe simple (ex. valeur du stock en fin de mois). Toucher un point affiche sa valeur. */
+export function LineChart({ points, format, empty }: { points: { label: string; value: number }[]; format: (v: number) => string; empty: string }) {
+  const [sel, setSel] = useState<number | null>(null);
+  if (points.length === 0) return null;
+  const W = 340, H = 130, padB = 20, padT = 10, padX = 8;
+  const max = Math.max(1, ...points.map((p) => p.value));
+  const x = (i: number) => padX + (points.length === 1 ? (W - 2 * padX) / 2 : (i * (W - 2 * padX)) / (points.length - 1));
+  const y = (v: number) => padT + (1 - v / max) * (H - padB - padT);
+  const active = sel ?? points.length - 1;
+  const d = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  const allZero = points.every((p) => p.value === 0);
+  const labelEvery = Math.ceil(points.length / 6);
+  return (
+    <div>
+      <div className="chart-tip" aria-live="polite">{allZero ? empty : <>{points[active].label} · <b>{format(points[active].value)}</b></>}</div>
+      <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Évolution">
+        <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="var(--line)" />
+        <path d={`${d} L${x(points.length - 1)},${y(0)} L${x(0)},${y(0)} Z`} fill="var(--green-soft)" />
+        <path d={d} fill="none" stroke="var(--green)" strokeWidth="2.2" strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <g key={p.label} onClick={() => setSel(i)} style={{ cursor: 'pointer' }}>
+            <rect x={x(i) - W / points.length / 2} y={0} width={W / points.length} height={H} fill="transparent" />
+            <circle cx={x(i)} cy={y(p.value)} r={i === active ? 4.5 : 2.5} fill={i === active ? 'var(--text)' : 'var(--green)'} />
+            {i % labelEvery === 0 && <text x={x(i)} y={H - 4} textAnchor="middle" fontSize="10" fill="var(--faint)">{p.label}</text>}
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+/** Résultat de chaque mois comparé à son objectif (trait blanc). */
+export function GoalChart({ data, format }: { data: { label: string; value: number; target: number }[]; format: (v: number) => string }) {
+  const [sel, setSel] = useState<number | null>(null);
+  if (data.length === 0) return null;
+  const W = 340, H = 140, padB = 20, padT = 8;
+  const max = Math.max(1, ...data.map((d) => Math.max(d.value, d.target)));
+  const min = Math.min(0, ...data.map((d) => d.value));
+  const y = (v: number) => padT + ((max - v) / (max - min)) * (H - padB - padT);
+  const slot = W / data.length;
+  const bw = Math.max(6, Math.min(22, slot * 0.5));
+  const active = sel ?? data.length - 1;
+  const cur = data[active];
+  const labelEvery = Math.ceil(data.length / 7);
+  return (
+    <div>
+      <div className="chart-tip" aria-live="polite">
+        {cur.label} · réalisé <b className={cur.value < 0 ? 'neg' : ''}>{format(cur.value)}</b>
+        {cur.target > 0 ? <> · objectif <b>{format(cur.target)}</b></> : ' · pas d’objectif'}
+      </div>
+      <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Objectifs et résultats par mois">
+        <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="var(--line)" />
+        {data.map((d, i) => {
+          const cx = slot * i + slot / 2;
+          const reached = d.target > 0 && d.value >= d.target;
+          return (
+            <g key={d.label} onClick={() => setSel(i)} style={{ cursor: 'pointer' }}>
+              <rect x={slot * i} y={0} width={slot} height={H} fill={i === active ? 'rgba(255,255,255,0.04)' : 'transparent'} rx="6" />
+              <rect x={cx - bw / 2} y={d.value >= 0 ? y(d.value) : y(0)} width={bw} height={Math.abs(y(d.value) - y(0))} rx="3"
+                fill={d.value < 0 ? 'var(--loss)' : reached || d.target === 0 ? 'var(--green)' : '#3a403a'} />
+              {d.target > 0 && <line x1={cx - bw / 2 - 4} x2={cx + bw / 2 + 4} y1={y(d.target)} y2={y(d.target)} stroke="var(--text)" strokeWidth="2" strokeLinecap="round" />}
+              {i % labelEvery === 0 && <text x={cx} y={H - 4} textAnchor="middle" fontSize="10" fill="var(--faint)">{d.label}</text>}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="chart-legend">
+        <span><i style={{ background: 'var(--green)' }} />Objectif atteint</span>
+        <span><i style={{ background: '#3a403a' }} />Pas encore</span>
+        <span><i style={{ background: 'var(--text)', height: 2, verticalAlign: 3 }} />Objectif</span>
+      </div>
+    </div>
+  );
+}

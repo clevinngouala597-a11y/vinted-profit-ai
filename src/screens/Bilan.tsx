@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { cashState, isAwaitingPayment, periodMetrics, plEntries, profitBy, saleBreakdown, series, stockValueAt, type PeriodMetrics } from '../lib/engine';
+import { cashState, goalFor, isAwaitingPayment, periodMetrics, plEntries, profitBy, saleBreakdown, series, stockValueAt, type PeriodMetrics } from '../lib/engine';
 import { formatEuros, formatPercent } from '../lib/money';
-import { addMonths, formatMonth, monthEnd, monthStart, todayISO } from '../lib/period';
+import { addMonths, buckets, formatMonth, monthEnd, monthStart, todayISO } from '../lib/period';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
-import { BarList, RevenueProfitChart } from '../ui/charts';
+import { BarList, GoalChart, LineChart, RevenueProfitChart } from '../ui/charts';
 import { IBack, IChevron } from '../ui/icons';
 import { InfoButton, Money, PageHeader } from '../ui/kit';
 
@@ -129,6 +129,9 @@ function Month() {
       </div>
       <p className="tiny faint">Colonne de droite : écart avec le mois précédent. Estimation de gestion, à ne pas confondre avec ton revenu imposable.</p>
 
+      <h2>Semaine par semaine</h2>
+      <div className="card"><RevenueProfitChart data={series(entries, buckets({ from, to }, todayISO()))} /></div>
+
       <h2>Stock et trésorerie</h2>
       <div className="calc">
         <div className="calc-row"><span>Achats de stock du mois</span><span>{formatEuros(m.purchases)}</span></div>
@@ -172,14 +175,16 @@ function Year() {
   const ds = useData();
   const entries = useEntries();
   const [year, setYear] = useState(Number(todayISO().slice(0, 4)));
-  const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}-01`).filter((m) => m <= todayISO());
+  // premier mois suivi : début du suivi, ou plus tôt si des opérations antérieures ont été saisies
+  const firstMonth = monthStart([ds.settings.trackingStart, ...ds.purchases.map((p) => p.date), ...ds.sales.map((x) => x.date), ...ds.expenses.map((e) => e.date)].sort()[0]);
+  const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}-01`).filter((m) => m <= todayISO() && m >= firstMonth);
   const rows: [string, PeriodMetrics][] = months.map((m) => [m, periodMetrics(ds, m, monthEnd(m), entries)]);
   const tot = periodMetrics(ds, `${year}-01-01`, `${year}-12-31`, entries);
-  const chart = series(entries, months.map((m) => ({ key: m, label: new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(new Date(m + 'T12:00')), from: m, to: monthEnd(m) })));
+  const chart = series(entries, months.map((m) => ({ key: m, label: shortMonth(m), from: m, to: monthEnd(m) })));
   const byCat = profitBy(entries, `${year}-01-01`, `${year}-12-31`, 'category').slice(0, 6);
   const topExp = [...ds.expenses.filter((e) => e.date.startsWith(String(year))).reduce((mp, e) => mp.set(e.category, (mp.get(e.category) ?? 0) + e.amount), new Map<string, number>())]
     .map(([name, v]) => ({ name, v })).sort((a, b) => b.v - a.v);
-  const firstYear = Math.min(year, ...ds.purchases.map((p) => Number(p.date.slice(0, 4))));
+  const firstYear = Number(firstMonth.slice(0, 4));
   const stockEnd = stockValueAt(ds, `${year}-12-31` < todayISO() ? `${year}-12-31` : todayISO());
 
   return (
@@ -197,7 +202,16 @@ function Year() {
       </div>
       <h2>Mois par mois</h2>
       <div className="card"><RevenueProfitChart data={chart} /></div>
-      <div className="card scroll-x" style={{ marginTop: 10 }}>
+      <h2>Objectifs de bénéfice</h2>
+      <div className="card">
+        <GoalChart format={(v) => formatEuros(v)} data={rows.map(([mo, x]) => ({ label: shortMonth(mo), value: x.commercialProfit, target: goalFor(ds, mo.slice(0, 7)).profit }))} />
+      </div>
+      <h2>Valeur du stock en fin de mois</h2>
+      <div className="card">
+        <LineChart format={(v) => formatEuros(v)} empty="Aucun stock sur cette année." points={months.map((mo) => ({ label: shortMonth(mo), value: stockValueAt(ds, monthEnd(mo) < todayISO() ? monthEnd(mo) : todayISO()).value }))} />
+      </div>
+      <h2>Détail</h2>
+      <div className="card scroll-x">
         <table className="report">
           <thead><tr><th>Mois</th><th>CA</th><th>Bénéfice</th><th>Résultat</th><th>Vendus</th></tr></thead>
           <tbody>
@@ -220,3 +234,5 @@ function Year() {
     </>
   );
 }
+
+const shortMonth = (m: string) => new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(new Date(m + 'T12:00'));

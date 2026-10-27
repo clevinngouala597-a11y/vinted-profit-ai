@@ -9,7 +9,13 @@ import {
   exportPurchases,
   exportSales,
   exportTransactions,
+  expensesTable,
+  itemsTable,
+  monthlyTable,
+  purchasesTable,
   restoreBackup,
+  salesTable,
+  transactionsTable,
 } from '../lib/exports';
 import { addMonths, formatMonth, monthEnd, monthStart, todayISO } from '../lib/period';
 import { useData } from '../lib/useData';
@@ -23,6 +29,7 @@ export function Exports() {
   const p = usePeriod();
   const fileRef = useRef<HTMLInputElement>(null);
   const [photos, setPhotos] = useState(true);
+  const [pdfMonth, setPdfMonth] = useState(todayISO().slice(0, 7));
   const { error, run, busy } = useAction();
   const stamp = `${p.range.from}_${p.range.to}`;
 
@@ -40,9 +47,34 @@ export function Exports() {
     <>
       <PageHeader title="Exports et sauvegarde" backTo="" />
       <ErrorBox error={error} />
-      <h2 style={{ marginTop: 0 }}>Exports CSV</h2>
-      <p className="small muted" style={{ marginTop: 0 }}>Fichiers lisibles dans Excel ou Numbers. Chacun indique la période, la date de génération et la définition des indicateurs.</p>
       <PeriodPicker p={p} />
+
+      <h2>Excel et PDF</h2>
+      <div className="list">
+        <ExportRow title="Classeur Excel complet" sub="Rapport mensuel, ventes, achats, dépenses, trésorerie, inventaire, définitions" onClick={() => run(async () => {
+          const { buildWorkbook } = await import('../lib/office');
+          const blob = await buildWorkbook([
+            monthlyTable(ds, months), salesTable(ds, p.range), purchasesTable(ds, p.range), expensesTable(ds, p.range),
+            transactionsTable(ds, p.range), itemsTable(ds),
+          ]);
+          downloadBlob(`vinted-profit-ai_${stamp}.xlsx`, blob);
+          ui.toast('Classeur Excel exporté');
+        })} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <select className="input" value={pdfMonth} onChange={(e) => setPdfMonth(e.target.value)} aria-label="Mois du bilan PDF">
+          {months.slice().reverse().map((mo) => <option key={mo.range.from} value={mo.range.from.slice(0, 7)} style={{ textTransform: 'capitalize' }}>{mo.label}</option>)}
+        </select>
+        <button className="btn btn-ghost btn-sm" style={{ flex: 'none' }} disabled={busy} onClick={() => run(async () => {
+          const { buildMonthlyPdf } = await import('../lib/office');
+          downloadBlob(`bilan_${pdfMonth}.pdf`, buildMonthlyPdf(ds, pdfMonth));
+          ui.toast('Bilan PDF exporté');
+        })}>Bilan PDF</button>
+      </div>
+      {busy && <p className="tiny muted">Préparation du fichier…</p>}
+
+      <h2>Exports CSV</h2>
+      <p className="small muted" style={{ marginTop: 0 }}>Fichiers texte lisibles partout. Chacun indique la période, la date de génération et la définition des indicateurs.</p>
       <div className="list" style={{ marginTop: 12 }}>
         <ExportRow title="Rapport mensuel" sub="12 derniers mois, indicateurs clés" onClick={() => dl(`rapport-mensuel_${todayISO()}.csv`, exportMonthlyReport(ds, months))} />
         <ExportRow title="Ventes" sub="Sur la période choisie" onClick={() => dl(`ventes_${stamp}.csv`, exportSales(ds, p.range))} />
@@ -51,7 +83,7 @@ export function Exports() {
         <ExportRow title="Mouvements de trésorerie" sub="Sur la période choisie" onClick={() => dl(`tresorerie_${stamp}.csv`, exportTransactions(ds, p.range))} />
         <ExportRow title="Inventaire complet" sub="Tous les articles, tous statuts" onClick={() => dl(`inventaire_${todayISO()}.csv`, exportItems(ds))} />
       </div>
-      <p className="tiny faint">Ce sont des rapports de gestion interne, pas des documents comptables officiels. Les exports Excel (XLSX) et PDF arrivent dans la phase 2.</p>
+      <p className="tiny faint">Ce sont des rapports de gestion interne, pas des documents comptables officiels.</p>
 
       <h2>Sauvegarde complète</h2>
       <p className="small muted" style={{ marginTop: 0 }}>

@@ -3,6 +3,7 @@ import type {
   Attachment,
   AuditLog,
   Expense,
+  Goal,
   InventoryMovement,
   Item,
   Purchase,
@@ -31,6 +32,7 @@ export class VPDatabase extends Dexie {
   inventoryMovements!: Table<InventoryMovement, string>;
   attachments!: Table<Attachment, string>;
   auditLogs!: Table<AuditLog, string>;
+  goals!: Table<Goal, string>;
 
   constructor(name = 'vinted-profit-ai') {
     super(name);
@@ -48,6 +50,8 @@ export class VPDatabase extends Dexie {
       attachments: 'id',
       auditLogs: 'id, at, entityId',
     });
+    // v2 : objectifs mensuels historisés
+    this.version(2).stores({ goals: 'id' });
   }
 }
 
@@ -63,6 +67,7 @@ export const DATA_TABLES = [
   'transactions',
   'inventoryMovements',
   'auditLogs',
+  'goals',
 ] as const;
 
 let current = new VPDatabase();

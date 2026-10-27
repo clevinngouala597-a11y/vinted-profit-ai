@@ -1,140 +1,232 @@
 /**
- * Exports CSV (séparateur « ; », virgule décimale, UTF-8 avec BOM : s'ouvre directement dans Excel en français)
- * et sauvegarde / restauration complète au format JSON (photos incluses).
+ * Exports. Chaque export est d'abord construit comme un TABLEAU typé (montants en centimes, dates ISO…),
+ * puis mis en forme en CSV (ici), en Excel ou en PDF (src/lib/office.ts). Les trois formats affichent donc
+ * exactement les mêmes chiffres.
+ *
+ * CSV : séparateur « ; », virgule décimale, UTF-8 avec BOM — s'ouvre directement dans Excel en français.
  */
 import { getDb, DATA_TABLES } from './db';
-import { itemCost, periodMetrics, saleBreakdown, type PeriodMetrics } from './engine';
+import { itemCost, periodMetrics, saleBreakdown } from './engine';
 import { formatPercent } from './money';
 import { formatDate, type Range } from './period';
 import { ORDER_LABEL, STATUS_LABEL, type Dataset } from './types';
 
-const eur = (c: number | null) => (c === null ? '' : (c / 100).toFixed(2).replace('.', ','));
-const cell = (v: unknown) => {
-  const s = v === null || v === undefined ? '' : String(v);
-  return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-
-function csv(meta: string[][], header: string[], rows: unknown[][]): string {
-  const lines = [...meta.map((m) => m.map(cell).join(';')), '', header.map(cell).join(';'), ...rows.map((r) => r.map(cell).join(';'))];
-  return '﻿' + lines.join('\r\n');
+export type ColType = 'text' | 'eur' | 'pct' | 'int' | 'date';
+export type CellValue = string | number | null;
+export interface Table {
+  /** Nom court (onglet Excel, nom de fichier). */
+  name: string;
+  title: string;
+  range: Range | null;
+  filters: string;
+  definitions: string[];
+  columns: { header: string; type: ColType }[];
+  rows: CellValue[][];
 }
 
-function metaBlock(title: string, range: Range | null, filters: string, definitions: string[]): string[][] {
-  return [
-    [title],
-    ['Période', range ? `du ${formatDate(range.from)} au ${formatDate(range.to)}` : 'Toutes les opérations'],
-    ['Généré le', new Date().toLocaleString('fr-FR')],
-    ['Filtres', filters || 'aucun'],
-    ['Nature', "Rapport de gestion interne — ce n'est pas un document comptable officiel."],
-    ...definitions.map((d) => ['Définition', d]),
-  ];
-}
-
+export const NOTICE = "Rapport de gestion interne — ce n'est pas un document comptable officiel.";
 const inR = (d: string, r: Range | null) => !r || (d >= r.from && d <= r.to);
+const C = (header: string, type: ColType = 'text') => ({ header, type });
 
-export function exportItems(ds: Dataset, filters = ''): string {
-  return csv(
-    metaBlock('Inventaire des articles', null, filters, [
+// ---------------------------------------------------------------------------
+// Tableaux
+// ---------------------------------------------------------------------------
+
+export function itemsTable(ds: Dataset, filters = ''): Table {
+  return {
+    name: 'Inventaire',
+    title: 'Inventaire des articles',
+    range: null,
+    filters,
+    definitions: [
       "Coût de revient = prix d'achat attribué + frais d'achat attribués",
       'Bénéfice prévisionnel = prix souhaité − coût de revient (estimation, hors frais de vente)',
-    ]),
-    ['Nom', 'Catégorie', 'Marque', 'Taille', 'Couleur', 'État', 'Statut', "Date d'achat", "Prix d'achat (€)", 'Frais (€)', 'Coût de revient (€)', 'Prix souhaité (€)', 'Prix minimum (€)', 'Bénéfice prévisionnel (€)', 'Date de vente', 'Notes'],
-    ds.items.map((i) => [
-      i.name, i.category, i.brand, i.size, i.color, i.condition, STATUS_LABEL[i.status], formatDate(i.purchaseDate),
-      eur(i.purchasePrice), eur(i.directFees), eur(itemCost(i)), eur(i.targetPrice), eur(i.minPrice),
-      i.targetPrice === null ? '' : eur(i.targetPrice - itemCost(i)), formatDate(i.soldAt), i.notes,
-    ]),
-  );
+    ],
+    columns: [
+      C('Nom'), C('Catégorie'), C('Marque'), C('Taille'), C('Couleur'), C('État'), C('Statut'), C("Date d'achat", 'date'),
+      C("Prix d'achat", 'eur'), C('Frais', 'eur'), C('Coût de revient', 'eur'), C('Prix souhaité', 'eur'), C('Prix minimum', 'eur'),
+      C('Bénéfice prévisionnel', 'eur'), C('Date de vente', 'date'), C('Notes'),
+    ],
+    rows: [...ds.items]
+      .sort((a, b) => a.purchaseDate.localeCompare(b.purchaseDate))
+      .map((i) => [
+        i.name, i.category, i.brand, i.size, i.color, i.condition, STATUS_LABEL[i.status], i.purchaseDate,
+        i.purchasePrice, i.directFees, itemCost(i), i.targetPrice, i.minPrice,
+        i.targetPrice === null ? null : i.targetPrice - itemCost(i), i.soldAt, i.notes,
+      ]),
+  };
 }
 
-export function exportSales(ds: Dataset, range: Range | null): string {
+export function salesTable(ds: Dataset, range: Range | null): Table {
   const names = new Map(ds.items.map((i) => [i.id, i.name]));
-  return csv(
-    metaBlock('Liste des ventes', range, '', [
-      'Revenu vendeur = montant réellement encaissé (les frais payés par l’acheteur n’en font pas partie)',
-      'Bénéfice commercial = revenu − remboursements − coût de revient des articles non récupérés − coûts supportés',
-    ]),
-    ['Date', 'Articles', 'Statut', 'Paiement', 'Prix affiché (€)', 'Réduction (€)', 'Revenu vendeur (€)', 'Remboursé (€)', 'Coût de revient (€)', 'Coûts de vente (€)', 'Bénéfice commercial (€)', 'Marge', 'ROI'],
-    ds.sales
+  return {
+    name: 'Ventes',
+    title: 'Liste des ventes',
+    range,
+    filters: '',
+    definitions: [
+      'Montant encaissé = ce que le vendeur reçoit réellement (les frais payés par l’acheteur n’en font pas partie)',
+      'Bénéfice commercial = encaissé − remboursements − coût de revient des articles non récupérés − coûts supportés',
+    ],
+    columns: [
+      C('Date', 'date'), C('Articles'), C('Statut'), C('Paiement'), C('Prix affiché', 'eur'), C('Réduction', 'eur'),
+      C('Montant encaissé', 'eur'), C('Remboursé', 'eur'), C('Coût de revient', 'eur'), C('Coûts de vente', 'eur'),
+      C('Bénéfice commercial', 'eur'), C('Marge', 'pct'), C('ROI', 'pct'),
+    ],
+    rows: ds.sales
       .filter((s) => inR(s.date, range))
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((s) => {
         const b = saleBreakdown(ds, s);
         return [
-          formatDate(s.date), b.lines.map((l) => names.get(l.itemId)).join(' + '), ORDER_LABEL[s.orderStatus],
-          s.paymentStatus === 'recu' ? 'Reçu' : 'En attente', eur(s.listedPrice), eur(s.discount), eur(b.revenue),
-          eur(b.refunded), eur(b.cogs), eur(b.directCosts), eur(b.profit), formatPercent(b.margin), formatPercent(b.roi),
+          s.date, b.lines.map((l) => names.get(l.itemId)).join(' + '), ORDER_LABEL[s.orderStatus],
+          s.paymentStatus === 'recu' ? 'Reçu' : 'En attente', s.listedPrice, s.discount, b.revenue, b.refunded, b.cogs,
+          b.directCosts, b.profit, b.margin, b.roi,
         ];
       }),
-  );
+  };
 }
 
-export function exportPurchases(ds: Dataset, range: Range | null): string {
-  return csv(
-    metaBlock('Liste des achats', range, '', ['Total payé = prix des articles + frais communs']),
-    ['Date', 'Source', 'Moyen de paiement', 'Nombre d’articles', 'Prix des articles (€)', 'Frais communs (€)', 'Total payé (€)', 'Notes'],
-    ds.purchases
+export function purchasesTable(ds: Dataset, range: Range | null): Table {
+  return {
+    name: 'Achats',
+    title: 'Liste des achats',
+    range,
+    filters: '',
+    definitions: ['Total payé = prix des articles + frais communs. Un achat de stock n’est pas une charge : son coût est imputé à la vente.'],
+    columns: [C('Date', 'date'), C('Source'), C('Moyen de paiement'), C('Articles', 'int'), C('Prix des articles', 'eur'), C('Frais communs', 'eur'), C('Total payé', 'eur'), C('Notes')],
+    rows: ds.purchases
       .filter((p) => inR(p.date, range))
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((p) => [
-        formatDate(p.date), p.source, p.paymentMethod, ds.purchaseLines.filter((l) => l.purchaseId === p.id).length,
-        eur(p.itemsTotal), eur(p.commonFees), eur(p.itemsTotal + p.commonFees), p.notes,
-      ]),
-  );
+      .map((p) => [p.date, p.source, p.paymentMethod, ds.purchaseLines.filter((l) => l.purchaseId === p.id).length, p.itemsTotal, p.commonFees, p.itemsTotal + p.commonFees, p.notes]),
+  };
 }
 
-export function exportExpenses(ds: Dataset, range: Range | null): string {
-  return csv(
-    metaBlock('Liste des dépenses', range, '', ['Une dépense liée à une vente est un coût de cette vente, pas un frais général']),
-    ['Date', 'Montant (€)', 'Catégorie', 'Fournisseur', 'Description', 'Liée à une vente', 'Justificatif'],
-    ds.expenses
+export function expensesTable(ds: Dataset, range: Range | null): Table {
+  return {
+    name: 'Dépenses',
+    title: 'Liste des dépenses',
+    range,
+    filters: '',
+    definitions: ['Une dépense liée à une vente est un coût de cette vente, pas un frais général'],
+    columns: [C('Date', 'date'), C('Montant', 'eur'), C('Catégorie'), C('Fournisseur'), C('Description'), C('Liée à une vente'), C('Justificatif')],
+    rows: ds.expenses
       .filter((e) => inR(e.date, range))
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((e) => [formatDate(e.date), eur(e.amount), e.category, e.supplier, e.description, e.saleId ? 'Oui' : 'Non', e.attachmentId ? 'Oui' : 'Non']),
-  );
+      .map((e) => [e.date, e.amount, e.category, e.supplier, e.description, e.saleId ? 'Oui' : 'Non', e.attachmentId ? 'Oui' : 'Non']),
+  };
 }
 
-export function exportTransactions(ds: Dataset, range: Range | null): string {
-  const kinds: Record<string, string> = {
-    solde_initial: 'Solde initial', achat: 'Achat', vente: 'Vente', frais_vente: 'Frais de vente',
-    depense: 'Dépense', remboursement: 'Remboursement', ajustement: 'Ajustement',
-  };
-  const st: Record<string, string> = { confirme: 'Confirmé', en_attente: 'En attente', annule: 'Annulé' };
-  return csv(
-    metaBlock('Historique des mouvements de trésorerie', range, '', ['Montant positif = encaissement, négatif = décaissement']),
-    ['Date', 'Libellé', 'Type', 'Statut', 'Montant (€)'],
-    ds.transactions
+const TX_KIND: Record<string, string> = {
+  solde_initial: 'Solde initial', achat: 'Achat', vente: 'Vente', frais_vente: 'Frais de vente',
+  depense: 'Dépense', remboursement: 'Remboursement', ajustement: 'Ajustement',
+};
+const TX_STATUS: Record<string, string> = { confirme: 'Confirmé', en_attente: 'En attente', annule: 'Annulé' };
+
+export function transactionsTable(ds: Dataset, range: Range | null): Table {
+  return {
+    name: 'Trésorerie',
+    title: 'Historique des mouvements de trésorerie',
+    range,
+    filters: '',
+    definitions: ['Montant positif = encaissement, négatif = décaissement. Seuls les mouvements confirmés comptent dans la trésorerie.'],
+    columns: [C('Date', 'date'), C('Libellé'), C('Type'), C('Statut'), C('Montant', 'eur')],
+    rows: ds.transactions
       .filter((t) => inR(t.date, range))
       .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
-      .map((t) => [formatDate(t.date), t.label, kinds[t.kind], st[t.status], eur(t.amount)]),
-  );
+      .map((t) => [t.date, t.label, TX_KIND[t.kind], TX_STATUS[t.status], t.amount]),
+  };
 }
 
-export function exportMonthlyReport(ds: Dataset, months: { label: string; range: Range }[]): string {
-  const rows = months.map((m) => [m.label, periodMetrics(ds, m.range.from, m.range.to)] as const);
-  const line = (label: string, f: (x: PeriodMetrics) => string) => [label, ...rows.map(([, x]) => f(x))];
-  return csv(
-    metaBlock('Rapport mensuel', months.length ? { from: months[0].range.from, to: months[months.length - 1].range.to } : null, '', [
-      'Bénéfice commercial = revenu vendeur − coût de revient des articles vendus − coûts attribuables aux ventes',
-      'Résultat estimé = bénéfice commercial − dépenses générales − articles perdus ou retirés',
-      'Les achats de stock ne sont pas des charges : ils sont imputés au moment de la vente',
-    ]),
-    ['Indicateur', ...rows.map(([l]) => l)],
-    [
-      line('Chiffre d’affaires vendeur (€)', (x) => eur(x.revenue)),
-      line('Coût des articles vendus (€)', (x) => eur(x.cogs)),
-      line('Coûts attribuables aux ventes (€)', (x) => eur(x.saleCosts)),
-      line('Bénéfice commercial (€)', (x) => eur(x.commercialProfit)),
-      line('Dépenses générales (€)', (x) => eur(x.general)),
-      line('Articles perdus ou retirés (€)', (x) => eur(x.writeOff)),
-      line('Résultat estimé (€)', (x) => eur(x.result)),
-      line('Achats de stock (€)', (x) => eur(x.purchases)),
-      line('Articles vendus', (x) => String(x.itemsSold)),
-      line('Marge commerciale', (x) => formatPercent(x.margin)),
-      line('ROI', (x) => formatPercent(x.roi)),
+export const MONTHLY_DEFINITIONS = [
+  'Bénéfice commercial = montant encaissé − coût de revient des articles vendus − coûts attribuables aux ventes',
+  'Résultat estimé = bénéfice commercial − dépenses générales − articles perdus ou retirés',
+  'Les achats de stock ne sont pas des charges : ils sont imputés au moment de la vente',
+  'Marge = bénéfice commercial ÷ chiffre d’affaires ; ROI = bénéfice commercial ÷ coût des articles vendus',
+];
+
+export function monthlyTable(ds: Dataset, months: { label: string; range: Range }[]): Table {
+  const m = months.map((x) => periodMetrics(ds, x.range.from, x.range.to));
+  const line = (label: string, f: (x: (typeof m)[number]) => number | null): CellValue[] => [label, ...m.map(f)];
+  return {
+    name: 'Rapport mensuel',
+    title: 'Rapport mensuel',
+    range: months.length ? { from: months[0].range.from, to: months[months.length - 1].range.to } : null,
+    filters: '',
+    definitions: MONTHLY_DEFINITIONS,
+    columns: [C('Indicateur'), ...months.map((x) => C(x.label, 'eur'))],
+    // le type de chaque LIGNE est donné par MONTHLY_ROW_TYPES (les colonnes sont des mois)
+    rows: [
+      line("Chiffre d'affaires", (x) => x.revenue),
+      line('Coût des articles vendus', (x) => x.cogs),
+      line('Coûts attribuables aux ventes', (x) => x.saleCosts),
+      line('Bénéfice commercial', (x) => x.commercialProfit),
+      line('Dépenses générales', (x) => x.general),
+      line('Articles perdus ou retirés', (x) => x.writeOff),
+      line('Résultat estimé', (x) => x.result),
+      line('Achats de stock', (x) => x.purchases),
+      line('Articles vendus', (x) => x.itemsSold),
+      line('Marge commerciale', (x) => x.margin),
+      line('ROI', (x) => x.roi),
     ],
-  );
+  };
 }
+/** Type de chaque ligne du rapport mensuel (dans l'ordre de monthlyTable). */
+export const MONTHLY_ROW_TYPES: ColType[] = ['eur', 'eur', 'eur', 'eur', 'eur', 'eur', 'eur', 'eur', 'int', 'pct', 'pct'];
+
+/** Type effectif d'une cellule : par colonne, sauf pour le rapport mensuel (par ligne). */
+export const cellType = (t: Table, row: number, col: number): ColType =>
+  col === 0 ? t.columns[0].type : t.name === 'Rapport mensuel' ? MONTHLY_ROW_TYPES[row] : t.columns[col].type;
+
+// ---------------------------------------------------------------------------
+// CSV
+// ---------------------------------------------------------------------------
+
+const eurText = (c: number) => ((c || 0) / 100).toFixed(2).replace('.', ',');
+const csvCell = (v: unknown) => {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+export function formatCell(v: CellValue, type: ColType): string {
+  if (v === null || v === '') return '';
+  switch (type) {
+    case 'eur': return eurText(v as number);
+    case 'pct': return formatPercent(v as number);
+    case 'date': return formatDate(v as string);
+    default: return String(v);
+  }
+}
+
+export function metaRows(t: Table): string[][] {
+  return [
+    [t.title],
+    ['Période', t.range ? `du ${formatDate(t.range.from)} au ${formatDate(t.range.to)}` : 'Toutes les opérations'],
+    ['Généré le', new Date().toLocaleString('fr-FR')],
+    ['Filtres', t.filters || 'aucun'],
+    ['Nature', NOTICE],
+    ...t.definitions.map((d) => ['Définition', d]),
+  ];
+}
+
+export function toCSV(t: Table): string {
+  const headers = t.columns.map((c) => (c.type === 'eur' && t.name !== 'Rapport mensuel' ? `${c.header} (€)` : c.header));
+  const lines = [
+    ...metaRows(t).map((r) => r.map(csvCell).join(';')),
+    '',
+    headers.map(csvCell).join(';'),
+    ...t.rows.map((r, i) => r.map((v, j) => csvCell(formatCell(v, cellType(t, i, j)))).join(';')),
+  ];
+  return '﻿' + lines.join('\r\n');
+}
+
+// Raccourcis conservés pour l'écran d'export
+export const exportItems = (ds: Dataset, filters = '') => toCSV(itemsTable(ds, filters));
+export const exportSales = (ds: Dataset, r: Range | null) => toCSV(salesTable(ds, r));
+export const exportPurchases = (ds: Dataset, r: Range | null) => toCSV(purchasesTable(ds, r));
+export const exportExpenses = (ds: Dataset, r: Range | null) => toCSV(expensesTable(ds, r));
+export const exportTransactions = (ds: Dataset, r: Range | null) => toCSV(transactionsTable(ds, r));
+export const exportMonthlyReport = (ds: Dataset, months: { label: string; range: Range }[]) => toCSV(monthlyTable(ds, months));
 
 export function downloadText(filename: string, content: string, mime = 'text/csv;charset=utf-8') {
   downloadBlob(filename, new Blob([content], { type: mime }));
@@ -173,7 +265,7 @@ export async function createBackup(includePhotos: boolean): Promise<Blob> {
     const atts = await db.attachments.toArray();
     data.attachments = await Promise.all(atts.map(async (a) => ({ id: a.id, mime: a.mime, createdAt: a.createdAt, data: await blobToDataURL(a.blob) })));
   }
-  return new Blob([JSON.stringify({ format: BACKUP_FORMAT, version: 1, createdAt: new Date().toISOString(), data })], {
+  return new Blob([JSON.stringify({ format: BACKUP_FORMAT, version: 2, createdAt: new Date().toISOString(), data })], {
     type: 'application/json',
   });
 }

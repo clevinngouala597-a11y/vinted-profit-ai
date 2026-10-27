@@ -2,7 +2,7 @@
 
 Application mobile (PWA installable sur iPhone) de comptabilité, de stock et de rentabilité pour l'achat-revente sur Vinted.
 
-**Version 0.1 — Phase 1 (MVP) fonctionnelle.** Les données réelles sont enregistrées sur l'appareil et persistent après fermeture.
+**Version 0.2 — Phases 1 et 2 fonctionnelles.** Les données réelles sont enregistrées sur l'appareil et persistent après fermeture.
 
 ## Fonctionnalités opérationnelles
 
@@ -28,7 +28,15 @@ Application mobile (PWA installable sur iPhone) de comptabilité, de stock et de
 - **Trésorerie** : solde confirmé, sommes en attente, réserve, budget d'achat disponible, historique des mouvements.
 - **Bilan** : jour, mois (compte de résultat comparé au mois précédent, stock et trésorerie en fin de mois, bénéfice par catégorie et par marque) et année (mois par mois). Liste des opérations à vérifier.
 - **Calculateur de prix** : coût de revient, bénéfice, marge, ROI, prix minimum pour un objectif, comparaison de 5 prix.
-- **Exports CSV** pour Excel : rapport mensuel, ventes, achats, dépenses, mouvements, inventaire. Chaque fichier indique la période, la date de génération et les définitions.
+- **Objectifs mensuels** : chiffre d'affaires, bénéfice, nombre de ventes, marge minimale, budget d'achat maximal, stock maximal, trésorerie à conserver.
+  - Pour chaque objectif : progression, reste à faire, rythme actuel et estimation de fin de mois (à partir du 7e jour).
+  - Chaque mois garde ses propres objectifs : les modifier ne change jamais les mois passés.
+- **Corrections tracées** : montants ou date d'une vente, avec ajustement de trésorerie et avant/après dans le journal.
+- **Graphiques du bilan** : semaine par semaine, objectifs comparés aux résultats, valeur du stock en fin de mois.
+- **Exports** (chaque fichier indique la période, la date de génération et les définitions) :
+  - classeur **Excel** avec de vrais nombres, formats €/%/dates, totaux, filtres et onglet de définitions ;
+  - **bilan mensuel PDF** : compte de résultat comparé, stock, trésorerie, objectifs, catégories, ventes, dépenses ;
+  - fichiers **CSV** : rapport mensuel, ventes, achats, dépenses, mouvements, inventaire.
 - **Sauvegarde et restauration** complètes en JSON, photos comprises. Journal des opérations et effacement des données confirmé deux fois.
 - **Hors ligne** : l'application s'ouvre sans réseau une fois installée.
 
@@ -41,8 +49,6 @@ Rien de ce qui suit n'est simulé dans l'application : ces fonctions sont simple
 | Fonction | Phase | Ce qu'il faut |
 |---|---|---|
 | Comptes utilisateurs et synchronisation entre appareils | 2 | Un projet Supabase (gratuit). En attendant, utiliser la sauvegarde JSON. |
-| Exports XLSX et PDF | 2 | Rien d'externe |
-| Objectifs avancés (nombre de ventes, réduction du stock…) | 2 | Rien d'externe |
 | Assistant IA, suggestions de prix, titres et descriptions | 3 | Une clé API Claude, appelée depuis un backend (jamais depuis le téléphone) |
 | Import CSV, OCR des justificatifs | 4 | OCR : service IA ou bibliothèque locale |
 | Prévisions, module fiscal, notifications | 4 | Sources officielles (impots.gouv.fr, urssaf.fr) |
@@ -88,7 +94,7 @@ Rythme conseillé : une sauvegarde par semaine, et avant toute mise à jour impo
 
 ## Base de données et migrations
 
-Le schéma IndexedDB est déclaré dans `src/lib/db.ts` (Dexie, `version(1)`). Pour faire évoluer le schéma, il faut ajouter un `this.version(2).stores({...}).upgrade(...)` : les données existantes sont alors migrées automatiquement à l'ouverture.
+Le schéma IndexedDB est déclaré dans `src/lib/db.ts` (Dexie). Versions : `version(1)` pour le schéma initial, `version(2)` pour l'ajout de la table `goals` (migration automatique, sans perte). Pour faire évoluer le schéma, il faut ajouter un `this.version(2).stores({...}).upgrade(...)` : les données existantes sont alors migrées automatiquement à l'ouverture.
 
 Tables :
 - réglages (`settings`) ;
@@ -100,7 +106,8 @@ Tables :
 - mouvements de trésorerie (`transactions`) ;
 - mouvements de stock (`inventoryMovements`) ;
 - pièces jointes (`attachments`) ;
-- journal (`auditLogs`).
+- journal (`auditLogs`) ;
+- objectifs mensuels (`goals`).
 
 ## Structure
 
@@ -109,7 +116,9 @@ src/lib/money.ts      montants en centimes, arrondis, répartition exacte
 src/lib/engine.ts     moteur financier (fonctions pures)
 src/lib/actions.ts    opérations d'écriture validées, transactionnelles et journalisées
 src/lib/db.ts         schéma de la base locale
-src/lib/exports.ts    CSV, sauvegarde et restauration
+src/lib/exports.ts    tableaux d'export, CSV, sauvegarde et restauration
+src/lib/office.ts     Excel et PDF (chargés seulement au moment d'exporter)
+src/lib/journal.ts    mise en forme lisible du journal
 src/screens/          écrans
 src/ui/               composants, icônes, graphiques
 tests/                tests unitaires et d'intégration (base IndexedDB simulée)

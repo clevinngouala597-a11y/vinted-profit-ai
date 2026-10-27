@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   cashState,
+  goalFor,
   isAwaitingPayment,
   periodMetrics,
   plEntries,
@@ -14,7 +15,7 @@ import { buckets, formatDate, formatRange, monthEnd, monthStart, previousRange }
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { RevenueProfitChart } from '../ui/charts';
-import { ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IWallet } from '../ui/icons';
+import { ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, ITarget, IWallet } from '../ui/icons';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
 
@@ -33,7 +34,7 @@ export function Home() {
   const re = reinvestment(ds, cash, month.commercialProfit);
   const chart = series(entries, buckets(p.range, p.today));
   const hasPrev = prev.revenue !== 0 || prev.commercialProfit !== 0;
-  const goal = ds.settings.monthlyProfitGoal;
+  const goal = goalFor(ds, p.today.slice(0, 7)).profit;
 
   const lossSales = ds.sales.filter((s) => s.orderStatus !== 'annulee' && saleBreakdown(ds, s).isLoss);
   const pendingPay = ds.sales.filter((s) => isAwaitingPayment(ds, s));
@@ -68,7 +69,7 @@ export function Home() {
         )}
         {goal > 0 && (p.key === 'mois') && (
           <div style={{ marginTop: 14 }}>
-            <div className="row-between small">
+            <div className="row-between small" role="button" tabIndex={0} onClick={() => go('objectifs')} style={{ cursor: 'pointer' }}>
               <span className="muted">Objectif du mois</span>
               <span><b>{formatEuros(Math.max(0, m.commercialProfit))}</b> <span className="muted">/ {formatEuros(goal)}</span></span>
             </div>
@@ -132,6 +133,7 @@ export function Home() {
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />
+        <MenuLink icon={<ITarget width={18} height={18} />} title="Objectifs" sub="Bénéfice, ventes, budget, stock" to="objectifs" close={() => setMenu(false)} />
         <MenuLink icon={<ICalc width={18} height={18} />} title="Calculateur de prix" sub="Simule un prix avant de publier" to="calculateur" close={() => setMenu(false)} />
         <MenuLink icon={<IWallet width={18} height={18} />} title="Trésorerie et réinvestissement" sub="Mouvements, réserve, budget d'achat" to="tresorerie" close={() => setMenu(false)} />
         <MenuLink icon={<IDownload width={18} height={18} />} title="Exports et sauvegarde" sub="CSV pour Excel, sauvegarde complète" to="exports" close={() => setMenu(false)} />

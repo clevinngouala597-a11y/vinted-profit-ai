@@ -42,3 +42,11 @@ describe('montants', () => {
     expect(allocate(-100, [1, 1, 1]).reduce((a, b) => a + b, 0)).toBe(-100);
   });
 });
+
+describe('affichage', () => {
+  it("n'affiche jamais de zéro négatif", async () => {
+    const { formatEuros } = await import('../src/lib/money');
+    expect(formatEuros(-0)).not.toContain('-');
+    expect(formatEuros(-0, { signed: true })).not.toMatch(/[-−]/);
+  });
+});

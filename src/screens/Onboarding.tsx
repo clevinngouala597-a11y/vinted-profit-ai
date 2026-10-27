@@ -42,7 +42,7 @@ export function Onboarding() {
         </div>
       </header>
       <ErrorBox error={error} />
-      <SettingsFields d={d} set={setD} />
+      <SettingsFields d={d} set={setD} onboarding />
       <div style={{ display: 'grid', gap: 8, marginTop: 6 }}>
         <button className="btn btn-primary" disabled={busy} onClick={() => run(async () => {
           await saveSettings({ ...defaultSettings(), ...fromDraft(d), onboarded: true });

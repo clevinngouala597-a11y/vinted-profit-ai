@@ -256,8 +256,26 @@ export interface AuditLog {
   details: string;
 }
 
+/**
+ * Objectifs d'un mois ("AAAA-MM"). Un mois sans objectifs propres reprend ceux du dernier mois renseigné :
+ * modifier les objectifs d'un mois ne change jamais ceux des mois passés.
+ * Une valeur 0 (ou null) signifie « pas d'objectif ».
+ */
+export interface Goal {
+  id: string; // "AAAA-MM"
+  revenue: Cents; // chiffre d'affaires minimum
+  profit: Cents; // bénéfice commercial minimum
+  salesCount: number; // articles vendus minimum
+  minMargin: number; // marge commerciale minimale, en %
+  maxPurchases: Cents; // budget d'achat maximal du mois
+  maxStockCount: number; // stock maximal en fin de mois (objectif de réduction)
+  cashToKeep: Cents; // trésorerie minimale à conserver
+  updatedAt: ISOTime;
+}
+
 /** Ensemble des données de l'utilisateur, utilisé par le moteur de calcul (fonctions pures). */
 export interface Dataset {
+  goals: Goal[];
   settings: Settings;
   items: Item[];
   purchases: Purchase[];

@@ -7,7 +7,7 @@
  */
 import { getDb, DATA_TABLES } from './db';
 import { splitPurchase, splitSale, itemCost } from './engine';
-import { sum, type Cents } from './money';
+import { allocate, sum, type Cents } from './money';
 import { todayISO } from './period';
 import {
   MANUAL_TRANSITIONS,
@@ -15,6 +15,7 @@ import {
   STATUS_LABEL,
   type Dataset,
   type Expense,
+  type Goal,
   type ISODate,
   type Item,
   type ItemStatus,
@@ -67,7 +68,7 @@ function tx(p: Omit<Transaction, 'id' | 'createdAt'>): Transaction {
 
 export async function loadDataset(): Promise<Dataset> {
   const db = getDb();
-  const [settings, items, purchases, purchaseLines, sales, saleLines, refunds, expenses, transactions] =
+  const [settings, items, purchases, purchaseLines, sales, saleLines, refunds, expenses, transactions, goals] =
     await Promise.all([
       db.settings.get('main'),
       db.items.toArray(),
@@ -78,6 +79,7 @@ export async function loadDataset(): Promise<Dataset> {
       db.refunds.toArray(),
       db.expenses.toArray(),
       db.transactions.toArray(),
+      db.goals.toArray(),
     ]);
   return {
     settings: settings ?? defaultSettings(),
@@ -89,6 +91,7 @@ export async function loadDataset(): Promise<Dataset> {
     refunds,
     expenses,
     transactions,
+    goals,
   };
 }
 
@@ -360,6 +363,97 @@ export async function cancelSale(saleId: string, date: ISODate = todayISO()) {
     }
     await audit('sale', saleId, 'annulation', date);
   });
+}
+
+export interface SaleCorrection {
+  date?: ISODate;
+  listedPrice?: Cents;
+  discount?: Cents;
+  sellerRevenue?: Cents;
+  platformFees?: Cents;
+  packagingCost?: Cents;
+  otherCosts?: Cents;
+}
+
+/**
+ * Corrige une vente déjà enregistrée. Rien n'est effacé : la répartition par article est recalculée,
+ * la différence d'argent passe par un mouvement d'ajustement (ou modifie la somme encore attendue),
+ * et l'avant/après est inscrit au journal avec la raison.
+ */
+export async function correctSale(saleId: string, patch: SaleCorrection, reason: string) {
+  if (!reason.trim()) fail('Indique la raison de la correction.');
+  if (patch.date !== undefined && !isDate(patch.date)) fail('La date de vente est invalide.');
+  for (const [k, label] of [['listedPrice', 'Le prix affiché'], ['discount', 'La réduction'], ['sellerRevenue', 'Le montant encaissé'], ['platformFees', 'Les frais'], ['packagingCost', "L'emballage"], ['otherCosts', 'Les autres coûts']] as const)
+    if (patch[k] !== undefined) nonNeg(patch[k]!, label);
+  const db = getDb();
+  await db.transaction('rw', [db.sales, db.saleLines, db.items, db.refunds, db.transactions, db.inventoryMovements, db.auditLogs], async () => {
+    const sale = await db.sales.get(saleId);
+    if (!sale) fail('Vente introuvable.');
+    if (sale!.orderStatus === 'annulee') fail('Une vente annulée ne peut pas être corrigée.');
+    const s = sale!;
+    const next = { ...s, ...patch };
+    const refunded = sum((await db.refunds.where('saleId').equals(saleId).toArray()).map((r) => r.amount));
+    if (next.sellerRevenue < refunded) fail(`Le montant encaissé ne peut pas être inférieur au total déjà remboursé (${refunded / 100} €).`);
+    const changed = (Object.keys(patch) as (keyof SaleCorrection)[]).filter((k) => patch[k] !== undefined && patch[k] !== s[k]);
+    if (changed.length === 0) return;
+
+    const oldCosts = s.platformFees + s.packagingCost + s.otherCosts;
+    const newCosts = next.platformFees + next.packagingCost + next.otherCosts;
+    const dRev = next.sellerRevenue - s.sellerRevenue;
+    const dCosts = newCosts - oldCosts;
+
+    // nouvelle répartition, avec les mêmes poids qu'à l'origine
+    const lines = await db.saleLines.where('saleId').equals(saleId).toArray();
+    const w = lines.every((l) => l.revenue > 0) ? lines.map((l) => l.revenue) : lines.map((l) => l.cogs);
+    const rev = allocate(next.sellerRevenue, w);
+    const cst = allocate(newCosts, w);
+    for (let k = 0; k < lines.length; k++) await db.saleLines.update(lines[k].id, { revenue: rev[k], costs: cst[k] });
+
+    await db.sales.update(saleId, { ...patch });
+    const txs = await db.transactions.where('refId').equals(saleId).toArray();
+    const label = txs.find((t) => t.kind === 'vente')?.label.replace(/^Vente · /, '').replace(/ \(après remboursement\)$/, '') ?? 'vente';
+    if (dRev !== 0) {
+      const pending = txs.find((t) => t.kind === 'vente' && t.status === 'en_attente');
+      if (pending) await db.transactions.update(pending.id, { amount: pending.amount + dRev });
+      else if (s.paymentStatus === 'recu' || !txs.some((t) => t.kind === 'vente'))
+        await db.transactions.add(tx({
+          date: todayISO(), amount: dRev, kind: 'ajustement', status: s.paymentStatus === 'recu' ? 'confirme' : 'en_attente',
+          refType: 'sale', refId: saleId, label: `Correction du montant encaissé · ${label}`,
+        }));
+    }
+    if (dCosts !== 0)
+      await db.transactions.add(tx({
+        date: todayISO(), amount: -dCosts, kind: 'ajustement', status: 'confirme', refType: 'sale', refId: saleId, label: `Correction des frais de vente · ${label}`,
+      }));
+    if (patch.date && patch.date !== s.date) {
+      for (const t of txs) if (t.status === 'en_attente' || t.kind === 'frais_vente') await db.transactions.update(t.id, { date: patch.date });
+      for (const l of lines) {
+        const it = await db.items.get(l.itemId);
+        if (it && it.soldAt === s.date) await db.items.update(l.itemId, { soldAt: patch.date });
+        const mv = await db.inventoryMovements.where('itemId').equals(l.itemId).filter((m) => m.kind === 'sortie_vente' && m.refId === saleId).toArray();
+        for (const m of mv) await db.inventoryMovements.update(m.id, { date: patch.date });
+      }
+    }
+    const before = Object.fromEntries(changed.map((k) => [k, s[k]]));
+    const after = Object.fromEntries(changed.map((k) => [k, next[k]]));
+    await audit('sale', saleId, 'correction', `${JSON.stringify(before)} → ${JSON.stringify(after)}. Raison : ${reason.trim()}`);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Objectifs
+// ---------------------------------------------------------------------------
+
+export async function saveGoal(month: string, g: Omit<Goal, 'id' | 'updatedAt'>) {
+  if (!/^\d{4}-\d{2}$/.test(month)) fail('Mois invalide.');
+  for (const k of ['revenue', 'profit', 'maxPurchases', 'cashToKeep'] as const) nonNeg(g[k], 'Ce montant');
+  for (const k of ['salesCount', 'maxStockCount'] as const)
+    if (!Number.isInteger(g[k]) || g[k] < 0) fail('Le nombre doit être un entier positif ou nul.');
+  if (!(g.minMargin >= 0 && g.minMargin <= 100)) fail('La marge minimale doit être comprise entre 0 et 100 %.');
+  const db = getDb();
+  const before = await db.goals.get(month);
+  await db.goals.put({ ...g, id: month, updatedAt: now() });
+  await audit('goal', month, before ? 'modification' : 'création', JSON.stringify(g));
 }
 
 // ---------------------------------------------------------------------------

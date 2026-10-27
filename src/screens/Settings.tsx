@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { saveSettings, wipeAllData } from '../lib/actions';
 import { getDb } from '../lib/db';
+import { ENTITY_LABEL, humanDetails } from '../lib/journal';
 import { centsToInput, parseEuros } from '../lib/money';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
@@ -58,7 +59,7 @@ export function fromDraft(d: SettingsDraft): Partial<Settings> {
   };
 }
 
-export function SettingsFields({ d, set }: { d: SettingsDraft; set: (d: SettingsDraft) => void }) {
+export function SettingsFields({ d, set, onboarding }: { d: SettingsDraft; set: (d: SettingsDraft) => void; onboarding?: boolean }) {
   const up = <K extends keyof SettingsDraft>(k: K) => (v: SettingsDraft[K]) => set({ ...d, [k]: v });
   return (
     <>
@@ -73,7 +74,7 @@ export function SettingsFields({ d, set }: { d: SettingsDraft; set: (d: Settings
       <div className="cols">
         <Field label="Début du suivi"><input type="date" className="input" value={d.trackingStart} onChange={(e) => up('trackingStart')(e.target.value)} /></Field>
         <Field label="Trésorerie de départ" hint="L'argent dédié à l'activité."><MoneyInput value={d.initialCash} onChange={up('initialCash')} /></Field>
-        <Field label="Objectif de bénéfice / mois"><MoneyInput value={d.monthlyProfitGoal} onChange={up('monthlyProfitGoal')} /></Field>
+        {onboarding && <Field label="Objectif de bénéfice / mois"><MoneyInput value={d.monthlyProfitGoal} onChange={up('monthlyProfitGoal')} /></Field>}
         <Field label="Bénéfice minimum / article"><MoneyInput value={d.minProfitPerItem} onChange={up('minProfitPerItem')} /></Field>
         <Field label="Budget max par achat"><MoneyInput value={d.maxPurchaseBudget} onChange={up('maxPurchaseBudget')} /></Field>
         <Field label="Réserve de sécurité" hint="Jamais proposée au réinvestissement."><MoneyInput value={d.safetyReserve} onChange={up('safetyReserve')} /></Field>
@@ -119,6 +120,8 @@ export function SettingsScreen() {
         const ok = await run(async () => { await saveSettings(fromDraft(d)); return true; });
         if (ok) ui.toast('Réglages enregistrés');
       }}>Enregistrer les réglages</button>
+
+      <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => go('objectifs')}>Objectifs mensuels</button>
 
       <h2>Catégories</h2>
       <p className="small muted" style={{ marginTop: 0 }}>{DEFAULT_CATEGORIES.join(', ')}.</p>
@@ -169,8 +172,8 @@ export function Journal() {
           {logs.map((l) => (
             <div className="li" key={l.id}>
               <span className="li-main">
-                <div className="li-title" style={{ fontSize: 14 }}>{l.entity} · {l.action}</div>
-                <div className="li-sub" style={{ whiteSpace: 'normal' }}>{l.details}</div>
+                <div className="li-title" style={{ fontSize: 14 }}>{ENTITY_LABEL[l.entity] ?? l.entity} · {l.action}</div>
+                <div className="li-sub" style={{ whiteSpace: 'normal' }}>{humanDetails(l.details)}</div>
               </span>
               <span className="tiny faint">{new Date(l.at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
             </div>

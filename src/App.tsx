@@ -17,6 +17,7 @@ import { Treasury } from './screens/Treasury';
 import { Exports } from './screens/Exports';
 import { SettingsScreen, Journal } from './screens/Settings';
 import { Onboarding } from './screens/Onboarding';
+import { Goals } from './screens/Goals';
 
 export function App() {
   const ds = useLiveDataset();
@@ -59,6 +60,7 @@ function Shell() {
     case 'exports': screen = <Exports />; break;
     case 'reglages': screen = <SettingsScreen />; break;
     case 'journal': screen = <Journal />; break;
+    case 'objectifs': screen = <Goals />; break;
     default: screen = <Home />;
   }
 

@@ -40,7 +40,8 @@ const fmt = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' 
 const fmtSigned = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', signDisplay: 'exceptZero' });
 
 export function formatEuros(c: Cents, opts?: { signed?: boolean }): string {
-  return (opts?.signed ? fmtSigned : fmt).format(c / 100);
+  // `|| 0` évite l'affichage « -0,00 € » pour un zéro négatif
+  return (opts?.signed ? fmtSigned : fmt).format((c || 0) / 100);
 }
 
 /** Valeur pour un champ de saisie : 1250 → "12,50". */

@@ -15,6 +15,7 @@ import { allocate, percent, sum, type Cents } from './money';
 import {
   IN_STOCK,
   type Dataset,
+  type Goal,
   type ISODate,
   type Item,
   type Sale,
@@ -428,4 +429,105 @@ export function profitBy(entries: PLEntry[], from: ISODate, to: ISODate, key: 'c
     map.set(k, cur);
   }
   return [...map.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.profit - a.profit);
+}
+
+// ---------------------------------------------------------------------------
+// Objectifs
+// ---------------------------------------------------------------------------
+
+export const emptyGoal = (id: string): Goal => ({
+  id, revenue: 0, profit: 0, salesCount: 0, minMargin: 0, maxPurchases: 0, maxStockCount: 0, cashToKeep: 0, updatedAt: '',
+});
+
+/** Objectifs applicables à un mois : ceux du mois, sinon ceux du dernier mois renseigné, sinon les réglages initiaux. */
+export function goalFor(ds: Dataset, month: string): Goal & { inherited: boolean; from: string | null } {
+  const own = ds.goals.find((g) => g.id === month);
+  if (own) return { ...own, inherited: false, from: null };
+  const prev = ds.goals.filter((g) => g.id < month).sort((a, b) => b.id.localeCompare(a.id))[0];
+  if (prev) return { ...prev, id: month, inherited: true, from: prev.id };
+  return {
+    ...emptyGoal(month),
+    profit: ds.settings.monthlyProfitGoal,
+    cashToKeep: ds.settings.safetyReserve,
+    maxPurchases: 0,
+    inherited: true,
+    from: 'reglages',
+  };
+}
+
+export type GoalKind = 'min' | 'max';
+export interface GoalLine {
+  key: keyof Omit<Goal, 'id' | 'updatedAt'>;
+  label: string;
+  kind: GoalKind;
+  unit: 'eur' | 'count' | 'pct';
+  target: number;
+  current: number;
+  /** Reste à faire (min) ou marge restante (max). Jamais négatif. */
+  remaining: number;
+  progress: number; // 0..1, pour la barre
+  /** Estimation de fin de mois au rythme actuel ; null si données insuffisantes ou non pertinent. */
+  projection: number | null;
+  status: 'atteint' | 'en_cours' | 'en_retard' | 'depasse' | 'respecte';
+}
+
+/**
+ * Progression des objectifs d'un mois. L'estimation de fin de mois n'est donnée qu'à partir
+ * du 7e jour du mois en cours (avant, le rythme n'est pas significatif).
+ */
+export function goalProgress(ds: Dataset, month: string, today: ISODate): { goal: ReturnType<typeof goalFor>; lines: GoalLine[]; elapsed: number; days: number } {
+  const goal = goalFor(ds, month);
+  const from = `${month}-01`;
+  const [y, m] = month.split('-').map(Number);
+  const days = new Date(y, m, 0).getDate();
+  const to = `${month}-${String(days).padStart(2, '0')}`;
+  const isCurrent = today >= from && today <= to;
+  const elapsed = isCurrent ? Number(today.slice(8, 10)) : today > to ? days : 0;
+  const mt = periodMetrics(ds, from, to);
+  const asOf = isCurrent || today < from ? today : to;
+  const cash = cashState(ds, asOf).balance;
+  const stock = stockValueAt(ds, asOf).count;
+  const canProject = isCurrent && elapsed >= 7;
+  const proj = (v: number) => (canProject ? Math.round((v / elapsed) * days) : null);
+
+  const lines: GoalLine[] = [];
+  const addMin = (key: GoalLine['key'], label: string, unit: GoalLine['unit'], target: number, current: number, projectable: boolean) => {
+    if (!(target > 0)) return;
+    const projection = projectable ? proj(current) : null;
+    const done = current >= target;
+    lines.push({
+      key, label, kind: 'min', unit, target, current,
+      remaining: Math.max(0, target - current),
+      progress: Math.max(0, Math.min(1, current / target)),
+      projection,
+      status: done ? 'atteint' : projection !== null && projection < target ? 'en_retard' : !isCurrent && today > to ? 'en_retard' : 'en_cours',
+    });
+  };
+  const addMax = (key: GoalLine['key'], label: string, unit: GoalLine['unit'], target: number, current: number, projectable: boolean) => {
+    if (!(target > 0)) return;
+    const projection = projectable ? proj(current) : null;
+    lines.push({
+      key, label, kind: 'max', unit, target, current,
+      remaining: Math.max(0, target - current),
+      progress: Math.max(0, Math.min(1, current / target)),
+      projection,
+      status: current > target ? 'depasse' : 'respecte',
+    });
+  };
+
+  addMin('revenue', "Chiffre d'affaires", 'eur', goal.revenue, mt.revenue, true);
+  addMin('profit', 'Bénéfice commercial', 'eur', goal.profit, mt.commercialProfit, true);
+  addMin('salesCount', 'Articles vendus', 'count', goal.salesCount, mt.itemsSold, true);
+  if (goal.minMargin > 0) {
+    const cur = mt.margin ?? 0;
+    lines.push({
+      key: 'minMargin', label: 'Marge moyenne minimale', kind: 'min', unit: 'pct', target: goal.minMargin, current: cur,
+      remaining: Math.max(0, goal.minMargin - cur), progress: Math.max(0, Math.min(1, cur / goal.minMargin)), projection: null,
+      status: mt.margin === null ? 'en_cours' : cur >= goal.minMargin ? 'atteint' : 'en_retard',
+    });
+  }
+  addMax('maxPurchases', "Budget d'achat du mois", 'eur', goal.maxPurchases, mt.purchases, true);
+  addMax('maxStockCount', 'Stock maximal', 'count', goal.maxStockCount, stock, false);
+  addMin('cashToKeep', 'Trésorerie à conserver', 'eur', goal.cashToKeep, cash, false);
+  return { goal, lines, elapsed, days };
 }
