@@ -330,7 +330,7 @@ export async function restoreBackup(file: Blob): Promise<{ items: number; sales:
   } catch {
     throw new Error("Ce fichier n'est pas une sauvegarde lisible.");
   }
-  if (parsed.format !== BACKUP_FORMAT || !parsed.data) throw new Error("Ce fichier n'est pas une sauvegarde Vinted Profit AI.");
+  if (parsed.format !== BACKUP_FORMAT || !parsed.data) throw new Error("Ce fichier n'est pas une sauvegarde CNG Vinted.");
   const data = parsed.data;
   for (const t of DATA_TABLES) if (data[t] !== undefined && !Array.isArray(data[t])) throw new Error(`Sauvegarde invalide (${t}).`);
   const db = getDb();

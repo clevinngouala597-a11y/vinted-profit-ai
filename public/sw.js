@@ -1,6 +1,6 @@
 // Service worker : met l'application en cache pour qu'elle s'ouvre sans réseau.
 // Les données ne passent jamais par ici : elles restent dans IndexedDB sur l'appareil.
-const CACHE = 'vpa-v1';
+const CACHE = 'vpa-v2';
 const SCOPE = self.registration.scope;
 
 self.addEventListener('install', (e) => {

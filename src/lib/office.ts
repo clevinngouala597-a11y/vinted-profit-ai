@@ -32,7 +32,7 @@ const sheetName = (s: string) => s.replace(/[\\/*?:[\]]/g, ' ').slice(0, 31);
 
 export async function buildWorkbook(tables: Table[]): Promise<Blob> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'Vinted Profit AI';
+  wb.creator = 'CNG Vinted';
   wb.created = new Date();
 
   for (const t of tables) {
@@ -277,7 +277,7 @@ export function buildMonthlyPdf(ds: Dataset, month: string): Blob {
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
     doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...MUTED);
-    doc.text(pdfText(`Vinted Profit AI · bilan mensuel · ${formatMonth(from)} · page ${i}/${pages}`), M, 291);
+    doc.text(pdfText(`CNG Vinted · bilan mensuel · ${formatMonth(from)} · page ${i}/${pages}`), M, 291);
   }
   return doc.output('blob');
 }
