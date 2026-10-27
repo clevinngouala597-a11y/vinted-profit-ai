@@ -8,7 +8,8 @@ import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { DEFAULT_CATEGORIES, SELLABLE, type SyncedEmail } from '../lib/types';
 import { announceSales } from '../lib/saleAlert';
-import { appsScriptSource, newSecret } from '../lib/vinted/appsScript';
+import { appsScriptSource, newSecret, newTopic, SCRIPT_VERSION } from '../lib/vinted/appsScript';
+import { driveBackup, driveRestore, sendTestNotification } from '../lib/vinted/drive';
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
 import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales, type SyncResult } from '../lib/vinted/sync';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, useAction, useUI } from '../ui/kit';
@@ -43,12 +44,13 @@ export function VintedSyncScreen() {
   // (Safari refuse de copier si une écriture en base passe avant)
   useEffect(() => {
     if (!s.syncToken) saveSettings({ syncToken: newSecret() });
-  }, [s.syncToken]);
+    else if (!s.ntfyTopic) saveSettings({ ntfyTopic: newTopic() });
+  }, [s.syncToken, s.ntfyTopic]);
   const [showScript, setShowScript] = useState(false);
   const copyScript = () => {
-    if (!s.syncToken) return;
+    if (!s.syncToken || !s.ntfyTopic) return;
     navigator.clipboard
-      .writeText(appsScriptSource(s.syncToken))
+      .writeText(appsScriptSource(s.syncToken, s.ntfyTopic))
       .then(() => ui.toast('Script copié'))
       .catch(() => {
         setShowScript(true);
@@ -91,6 +93,7 @@ export function VintedSyncScreen() {
               </div>
             )}
           </div>
+          {(s.scriptVersion ?? 1) < SCRIPT_VERSION && <ScriptUpdate copy={copyScript} showScript={showScript} />}
           <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
             <button className="btn btn-primary" disabled={busy} onClick={() => run(async () => { const r = await syncNow(); setResult(syncSummary(r)); })}>
               {busy ? 'Synchronisation…' : 'Synchroniser maintenant'}
@@ -113,6 +116,9 @@ export function VintedSyncScreen() {
               Tester la notification
             </button>
           </div>
+
+          {(s.scriptVersion ?? 1) >= SCRIPT_VERSION && <PushSection />}
+          {(s.scriptVersion ?? 1) >= SCRIPT_VERSION && <DriveSection />}
 
           {recent && recent.length > 0 && (
             <>
@@ -153,14 +159,14 @@ export function VintedSyncScreen() {
           <p className="small muted">L'installation prend 5 minutes, une seule fois. Elle est plus confortable sur ordinateur ; sur iPhone, demande la « version ordinateur » du site dans Safari.</p>
 
           <Step n={1} title="Copie ton script">
-            <button className="btn btn-primary" onClick={copyScript} disabled={!s.syncToken}>Copier le script</button>
-            {s.syncToken && <ScriptPreview token={s.syncToken} open={showScript} />}
+            <button className="btn btn-primary" onClick={copyScript} disabled={!s.syncToken || !s.ntfyTopic}>Copier le script</button>
+            {s.syncToken && s.ntfyTopic && <ScriptPreview token={s.syncToken} topic={s.ntfyTopic} open={showScript} />}
           </Step>
           <Step n={2} title="Colle-le dans Google Apps Script">
             <ol className="small muted" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
               <li>Ouvre <a href="https://script.google.com/home/projects/create" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>script.google.com</a> avec ton compte Gmail : un nouveau projet s'ouvre.</li>
               <li>Efface le contenu de l'éditeur, colle le script, puis enregistre (icône disquette).</li>
-              <li>En haut, choisis la fonction <b>autoriser</b> puis <b>Exécuter</b>. Accepte l'accès à Gmail. Si Google affiche « application non validée » : <i>Paramètres avancés</i> → <i>Accéder au projet</i> (c'est ton propre script).</li>
+              <li>En haut, choisis la fonction <b>installer</b> puis <b>Exécuter</b>. Accepte les accès demandés (Gmail, Drive pour les sauvegardes, services externes pour les notifications). Si Google affiche « application non validée » : <i>Paramètres avancés</i> → <i>Accéder au projet</i> (c'est ton propre script).</li>
             </ol>
           </Step>
           <Step n={3} title="Déploie-le en application Web">
@@ -191,6 +197,95 @@ export function VintedSyncScreen() {
   );
 }
 
+/** Le script installé est d'une version antérieure : mise à jour en 2 minutes (même adresse). */
+function ScriptUpdate({ copy, showScript }: { copy: () => void; showScript: boolean }) {
+  const s = useData().settings;
+  return (
+    <div className="card" style={{ marginTop: 12, borderColor: 'rgba(99,247,123,.4)' }}>
+      <b>Nouveau : sauvegarde Google Drive et notifications appli fermée</b>
+      <p className="small muted" style={{ margin: '6px 0 10px' }}>Mets ton script à jour une fois (2 minutes, plus simple sur ordinateur). Ton adresse /exec ne change pas.</p>
+      <ol className="small" style={{ margin: '0 0 12px', paddingLeft: 18, display: 'grid', gap: 6 }}>
+        <li>Appuie sur <b>Copier le script</b> ci-dessous.</li>
+        <li>Sur <a href="https://script.google.com/home" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>script.google.com</a>, ouvre ton projet, <b>sélectionne tout le code</b>, efface-le, colle le nouveau, puis <b>enregistre</b> (disquette).</li>
+        <li>En haut, choisis la fonction <b>installer</b> → <b>Exécuter</b>, et accepte les nouvelles autorisations (Drive, services externes).</li>
+        <li><b>Déployer</b> → <b>Gérer les déploiements</b> → ✏️ → Version : <b>Nouvelle version</b> → <b>Déployer</b>.</li>
+        <li>Reviens ici et appuie sur <b>Synchroniser maintenant</b>.</li>
+      </ol>
+      <button className="btn btn-primary btn-sm" onClick={copy} disabled={!s.syncToken || !s.ntfyTopic}>Copier le script</button>
+      {s.syncToken && s.ntfyTopic && <ScriptPreview token={s.syncToken} topic={s.ntfyTopic} open={showScript} />}
+    </div>
+  );
+}
+
+/** Notifications à chaque vente, même appli fermée (appli ntfy). */
+function PushSection() {
+  const s = useData().settings;
+  const ui = useUI();
+  const { error, run, busy } = useAction();
+  const copyTopic = () => navigator.clipboard.writeText(s.ntfyTopic).then(() => ui.toast('Nom copié')).catch(() => ui.toast(s.ntfyTopic));
+  return (
+    <>
+      <h2>Notifications appli fermée</h2>
+      <div className="card">
+        <div className="row-between">
+          <b>Une notification à chaque vente</b>
+          <span className={`badge ${s.scriptNotifications ? 'green' : 'warn'}`}>{s.scriptNotifications ? 'Actives' : 'À activer'}</span>
+        </div>
+        <p className="small muted" style={{ margin: '6px 0 10px' }}>Ton script vérifie ton Gmail toutes les 5 minutes et t'envoie une notification sur l'écran verrouillé (vente et paiement reçu), avec l'appli gratuite ntfy.</p>
+        <ErrorBox error={error} />
+        <ol className="small" style={{ margin: '0 0 12px', paddingLeft: 18, display: 'grid', gap: 6 }}>
+          <li>Installe <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>ntfy</a> depuis l'App Store et autorise ses notifications.</li>
+          <li>Dans ntfy, appuie sur <b>+</b>, colle ce nom de sujet, puis <b>Subscribe</b> :</li>
+        </ol>
+        <div className="row-between" style={{ gap: 8, marginBottom: 10 }}>
+          <code style={{ fontSize: 13, wordBreak: 'break-all' }}>{s.ntfyTopic}</code>
+          <button className="btn btn-ghost btn-sm" onClick={copyTopic}>Copier</button>
+        </div>
+        <p className="tiny faint" style={{ marginTop: 0 }}>Ce nom est secret : quelqu'un qui le connaît pourrait lire tes notifications de vente. Le texte des notifications (article, montant) passe par le service ntfy.sh.</p>
+        <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => run(async () => {
+          const active = await sendTestNotification();
+          ui.toast(active ? 'Notification envoyée : regarde ton iPhone' : 'Notification envoyée — lance « installer » dans ton script pour la vérification automatique');
+        })}>{busy ? 'Envoi…' : 'Envoyer une notification de test'}</button>
+      </div>
+    </>
+  );
+}
+
+/** Sauvegarde automatique dans le Google Drive de l'utilisateur. */
+function DriveSection() {
+  const s = useData().settings;
+  const ui = useUI();
+  const { error, run, busy } = useAction();
+  const last = s.driveBackupAt ? new Date(s.driveBackupAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : null;
+  return (
+    <>
+      <h2>Sauvegarde Google Drive</h2>
+      <div className="card">
+        <div className="row-between">
+          <b>Sauvegarde automatique</b>
+          <span className={`badge ${last ? 'green' : 'warn'}`}>{last ? 'Active' : 'Pas encore faite'}</span>
+        </div>
+        <p className="small muted" style={{ margin: '6px 0 10px' }}>
+          Toutes tes données sont copiées dans ton Google Drive (dossier « CNG Vinted - sauvegardes ») toutes les 12 heures quand tu ouvres l'appli. Les 30 derniers jours sont gardés.
+          {last && <> Dernière sauvegarde : <b>{last}</b>.</>}
+        </p>
+        <ErrorBox error={error} />
+        <div className="btn-row">
+          <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => run(async () => { await driveBackup(); ui.toast('Sauvegardé dans ton Google Drive'); })}>{busy ? '…' : 'Sauvegarder maintenant'}</button>
+          <button className="btn btn-ghost btn-sm" disabled={busy} onClick={async () => {
+            const ok = await ui.confirm({
+              title: 'Restaurer depuis Google Drive ?',
+              text: 'Toutes les données de l’appli sur ce téléphone sont remplacées par la dernière sauvegarde de ton Drive. À utiliser sur un nouveau téléphone ou après une perte de données.',
+              confirmLabel: 'Restaurer', danger: true,
+            });
+            if (ok) run(async () => { const r = await driveRestore(); ui.toast(`Restauré : ${r.sales} ventes, ${r.items} articles`); });
+          }}>Restaurer</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <div className="line-card" style={{ paddingBottom: 14 }}>
@@ -200,8 +295,8 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-function ScriptPreview({ token, open }: { token: string; open: boolean }) {
-  const code = useMemo(() => appsScriptSource(token), [token]);
+function ScriptPreview({ token, topic, open }: { token: string; topic: string; open: boolean }) {
+  const code = useMemo(() => appsScriptSource(token, topic), [token, topic]);
   return (
     <details style={{ marginTop: 10 }} open={open || undefined}>
       <summary className="small muted" style={{ cursor: 'pointer' }}>Voir le script</summary>

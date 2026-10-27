@@ -53,6 +53,8 @@ Application mobile (PWA installable sur iPhone) de comptabilité, de stock et de
   - un script Google Apps Script, installé une fois dans **ton** compte Google, lit uniquement les e-mails Vinted utiles ;
   - il ne répond qu'avec une clé secrète générée par l'app ;
   - le mot de passe Vinted n'est jamais utilisé, et rien ne passe par un serveur tiers.
+- **Sauvegarde Google Drive automatique.** Le script Google version 2 range une copie de toutes les données dans le Drive de l'utilisateur, dossier « CNG Vinted - sauvegardes ». Elle est faite toutes les 12 h à l'ouverture de l'appli, à raison d'un fichier par jour, et les 30 derniers sont gardés. Une restauration en un toucher est possible, par exemple sur un nouveau téléphone.
+- **Notifications appli fermée.** Le script vérifie Gmail toutes les 5 minutes et envoie une notification à chaque vente et à chaque paiement reçu. Elles passent par l'appli gratuite ntfy, avec un sujet secret généré par l'appli.
 - **Import CSV** (articles avec achat et vente éventuelle, ou dépenses) :
   - association automatique des colonnes, modifiable, avec aperçu ;
   - validation ligne par ligne, rapport des rejets téléchargeable ;
@@ -84,7 +86,7 @@ Rien de ce qui suit n'est simulé dans l'application : ces fonctions sont simple
 |---|---|---|
 | Comptes utilisateurs et synchronisation entre appareils | 2 | Un projet Supabase (gratuit). En attendant, utiliser la sauvegarde JSON. |
 | Assistant IA, suggestions de prix, titres et descriptions | 3 | Une clé API Claude, appelée depuis un backend (jamais depuis le téléphone) |
-| Synchro sans ouvrir l'app (en arrière-plan) | — | Un serveur ; aujourd'hui la synchro se fait à chaque ouverture |
+| Enregistrement des ventes sans ouvrir l'app | — | Un serveur. Les notifications arrivent appli fermée, mais l'enregistrement se fait à l'ouverture |
 | Notifications sur l'écran verrouillé (push) | — | Un serveur d'envoi ; les alertes restent pour l'instant dans l'application |
 | Mise à jour automatique des règles fiscales | — | Les règles sont datées dans `src/lib/fiscal.ts` et doivent être revérifiées chaque année |
 

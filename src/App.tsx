@@ -161,6 +161,9 @@ function useAutoSync() {
         const r = await syncNow();
         // les nouvelles ventes ont leur propre bannière (avec le son) ; le reste est résumé discrètement
         if (!r.newSales.length && (r.applied || r.inbox)) toast.current(`Vinted : ${syncSummary(r)}`);
+        // sauvegarde Google Drive automatique (toutes les 12 h), silencieuse
+        const { autoBackupIfDue } = await import('./lib/vinted/drive');
+        await autoBackupIfDue().catch(() => {});
       } catch {
         /* silencieux : l'erreur s'affiche dans l'écran Synchro quand l'utilisateur lance la synchro */
       }

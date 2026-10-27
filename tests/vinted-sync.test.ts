@@ -356,9 +356,10 @@ describe('Script Google', () => {
     const sandbox = {
       GmailApp: { search: (q: string) => { queries.push(q); return [{ getMessages: () => [msg('m1', "Ton article s'est vendu !")] }]; } },
       ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s: string) => ({ setMimeType: () => s }) },
+      ScriptApp: { getProjectTriggers: () => [] },
     };
     vm.createContext(sandbox);
-    vm.runInContext(appsScriptSource('CLE-TEST') + '\nthis.doGet = doGet;', sandbox);
+    vm.runInContext(appsScriptSource('CLE-TEST', 'cng-vinted-test') + '\nthis.doGet = doGet;', sandbox);
     const doGet = (sandbox as unknown as { doGet: (e: unknown) => string }).doGet;
     expect(JSON.parse(doGet({ parameter: { token: 'mauvaise' } }))).toEqual({ error: 'unauthorized' });
     const ok = JSON.parse(doGet({ parameter: { token: 'CLE-TEST', after: '2026/10/01' } }));

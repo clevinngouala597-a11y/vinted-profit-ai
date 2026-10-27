@@ -64,6 +64,10 @@ export function defaultSettings(today = todayISO()): Settings {
     saleAlert: true,
     autoRecord: true,
     showStock: false,
+    ntfyTopic: '',
+    scriptVersion: null,
+    scriptNotifications: false,
+    driveBackupAt: null,
   };
 }
 

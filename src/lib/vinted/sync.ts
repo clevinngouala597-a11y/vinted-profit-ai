@@ -42,7 +42,14 @@ const now = () => new Date().toISOString();
 
 export class SyncError extends Error {}
 
-export async function fetchVintedEmails(url: string, token: string, since: ISODate, fetcher: typeof fetch = fetch): Promise<RawEmail[]> {
+export interface ScriptReply {
+  messages: RawEmail[];
+  /** version du script (1 si absente : première version) */
+  version: number;
+  notifications: boolean;
+}
+
+export async function fetchVintedEmails(url: string, token: string, since: ISODate, fetcher: typeof fetch = fetch): Promise<ScriptReply> {
   if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) throw new SyncError("L'adresse du script doit commencer par https://script.google.com/");
   const u = `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}&after=${since.replace(/-/g, '/')}`;
   let res: Response;
@@ -52,7 +59,7 @@ export async function fetchVintedEmails(url: string, token: string, since: ISODa
     throw new SyncError('Impossible de joindre le script Google. Vérifie ta connexion internet.');
   }
   if (!res.ok) throw new SyncError(`Le script Google a répondu avec une erreur (${res.status}). Vérifie qu'il est déployé en « Application Web » accessible à « Tout le monde ».`);
-  let body: { error?: string; messages?: RawEmail[] };
+  let body: { error?: string; messages?: RawEmail[]; version?: number; notifications?: boolean };
   try {
     body = await res.json();
   } catch {
@@ -61,7 +68,7 @@ export async function fetchVintedEmails(url: string, token: string, since: ISODa
   if (body.error === 'unauthorized') throw new SyncError('Clé secrète refusée : le script et l’application n’ont pas la même clé.');
   if (body.error) throw new SyncError(`Erreur du script Google : ${body.error}`);
   if (!Array.isArray(body.messages)) throw new SyncError('Réponse inattendue du script Google.');
-  return body.messages;
+  return { messages: body.messages, version: body.version ?? 1, notifications: body.notifications === true };
 }
 
 // ---------------------------------------------------------------------------
@@ -503,7 +510,10 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
   const { syncUrl, syncToken } = ds.settings;
   if (!syncUrl || !syncToken) throw new SyncError('La synchronisation Gmail n’est pas encore configurée.');
   const since = ds.settings.syncSince ?? ds.settings.trackingStart;
-  const emails = await fetchVintedEmails(syncUrl, syncToken, since, fetcher);
+  const reply = await fetchVintedEmails(syncUrl, syncToken, since, fetcher);
+  const emails = reply.messages;
+  if (reply.version !== ds.settings.scriptVersion || reply.notifications !== ds.settings.scriptNotifications)
+    await saveSettings({ scriptVersion: reply.version, scriptNotifications: reply.notifications });
   const db = getDb();
   const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
   const added = await ingestEmails(emails.filter((e) => e.date.slice(0, 10) >= since));
