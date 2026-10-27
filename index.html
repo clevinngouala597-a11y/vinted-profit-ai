@@ -30,17 +30,28 @@
         </g>
       </svg>
       <div class="sp-name">CNG Vinted</div>
+      <div class="sp-skip">Touche l'écran pour passer</div>
     </div>
+    <script>
+      // toucher l'écran de chargement le fait disparaître tout de suite
+      document.getElementById('splash').addEventListener('click', function () {
+        window.__splashSkipped = true;
+        this.classList.add('sp-hide');
+        var el = this;
+        setTimeout(function () { el.remove(); }, 850);
+      });
+    </script>
     <style>
       html, body { background: #090B0A; margin: 0; }
-      #splash { position: fixed; inset: 0; z-index: 100; background: #090B0A; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; transition: opacity .6s ease, visibility .6s; }
+      #splash { position: fixed; inset: 0; z-index: 100; background: #090B0A; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; transition: opacity .8s ease, visibility .8s; cursor: pointer; -webkit-tap-highlight-color: transparent; }
       #splash.sp-hide { opacity: 0; visibility: hidden; }
-      #splash .sp-name { color: #A1A1AA; font: 600 15px/1 'Manrope', system-ui, -apple-system, sans-serif; letter-spacing: .02em; opacity: 0; animation: sp-fade .8s 1.3s ease forwards; }
-      #splash .sp-l { opacity: 0; animation: sp-fade .8s ease forwards; }
-      #splash .sp-l:nth-child(2) { animation-delay: .25s; }
-      #splash .sp-l:nth-child(3) { animation-delay: .5s; }
-      #splash .sp-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: sp-draw 1.2s .8s cubic-bezier(.6,0,.2,1) forwards; }
-      #splash .sp-head { opacity: 0; animation: sp-fade .35s 1.9s ease forwards; }
+      #splash .sp-name { color: #A1A1AA; font: 600 15px/1 'Manrope', system-ui, -apple-system, sans-serif; letter-spacing: .02em; opacity: 0; animation: sp-fade 1.5s 5s ease forwards; }
+      #splash .sp-l { opacity: 0; animation: sp-fade 2s ease forwards; }
+      #splash .sp-l:nth-child(2) { animation-delay: .9s; }
+      #splash .sp-l:nth-child(3) { animation-delay: 1.8s; }
+      #splash .sp-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: sp-draw 4s 3.5s cubic-bezier(.45,0,.25,1) forwards; }
+      #splash .sp-head { opacity: 0; animation: sp-fade .6s 7.4s ease forwards; }
+      #splash .sp-skip { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); color: #6B6F6B; font: 500 13px/1 'Manrope', system-ui, -apple-system, sans-serif; opacity: 0; animation: sp-fade 1s 2.5s ease forwards; }
       @keyframes sp-draw { to { stroke-dashoffset: 0; } }
       @keyframes sp-fade { to { opacity: 1; } }
       @media (prefers-reduced-motion: reduce) {
