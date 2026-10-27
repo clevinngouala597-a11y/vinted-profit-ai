@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { VPDatabase, getDb, setDb } from '../src/lib/db';
 import { defaultSettings, loadDataset, recordPurchase, recordSale, saveSettings } from '../src/lib/actions';
 import { cashState, periodMetrics, saleBreakdown } from '../src/lib/engine';
-import { dismissSynced, fetchVintedEmails, guessCategory, resolveSale, syncNow } from '../src/lib/vinted/sync';
+import { dismissSynced, fetchVintedEmails, guessCategory, resolveSale, syncNow, unpaidInboxSales } from '../src/lib/vinted/sync';
 import type { RawEmail } from '../src/lib/vinted/parse';
 
 // E-mails fictifs au format Vinted
@@ -135,6 +135,63 @@ describe('Synchronisation Gmail', () => {
 
 import vm from 'node:vm';
 import { appsScriptSource, newSecret } from '../src/lib/vinted/appsScript';
+
+describe('Article revendu plusieurs fois (annulations, remboursements)', () => {
+  const T = 'Pantalon Sarouel Écru Drape à la Taille Style Bohème Chic - Taille L';
+
+  it('chaque paiement va à la dernière vente ouverte ; les ventes sans paiement sont signalées', async () => {
+    await saveSettings({ syncSince: '2026-07-01' });
+    inbox = [
+      sold('s1', '2026-07-31T06:15:00Z', T, '40,00'), // remboursée (aucun e-mail d'annulation)
+      sold('s2', '2026-08-01T16:06:00Z', T, '35,00'), // remboursée
+      sold('s3', '2026-08-06T20:38:00Z', T, '35,00'), // remboursée
+      sold('s4', '2026-08-07T12:13:00Z', T, '35,00'),
+      done('d4', '2026-08-13T15:28:00Z', T, '35,00'),
+      sold('s5', '2026-08-22T12:58:00Z', T, '30,00'),
+      done('d5', '2026-08-31T15:27:00Z', T, '30,00'),
+      sold('s6', '2026-09-22T19:08:00Z', T, '36,00'),
+      done('d6', '2026-09-29T16:55:00Z', T, '36,00'),
+    ];
+    const r = await syncNow(fakeScript, '2026-10-27');
+    expect(r).toMatchObject({ applied: 0, inbox: 6, waiting: 3 });
+    const rows = await getDb().syncedEmails.toArray();
+    expect(unpaidInboxSales(rows, '2026-10-27').map((x) => x.id).sort()).toEqual(['s1', 's2', 's3']);
+
+    // l'utilisateur écarte les 3 ventes remboursées, puis valide les autres (dans le désordre)
+    await dismissSynced(['s1', 's2', 's3']);
+    const item = { name: 'Pantalon sarouel écru', category: 'Pantalons et jeans', cost: 800, purchaseDate: '2026-07-20' };
+    await resolveSale('s6', { newItem: item });
+    await resolveSale('s4', { newItem: item });
+    await resolveSale('s5', { newItem: item });
+
+    const ds = await loadDataset();
+    expect(ds.sales).toHaveLength(3);
+    for (const s of ds.sales) expect(s).toMatchObject({ paymentStatus: 'recu', orderStatus: 'terminee' });
+    const closed = Object.fromEntries(ds.sales.map((s) => [s.date, s.closedAt]));
+    expect(closed).toEqual({ '2026-08-07': '2026-08-13', '2026-08-22': '2026-08-31', '2026-09-22': '2026-09-29' });
+    expect(periodMetrics(ds, '2026-07-01', '2026-10-31').revenue).toBe(3500 + 3000 + 3600);
+    expect(await getDb().syncedEmails.where('status').anyOf('inbox', 'waiting').count()).toBe(0);
+  });
+
+  it('annulée puis revendue : la 1re vente est annulée, la 2e est payée', async () => {
+    await saveSettings({ syncSince: '2026-06-27' });
+    const C = 'Chemise à carreaux verte style vintage Détails brandebourgs - Taille L';
+    await buy(C, 600, '2026-06-20');
+    inbox = [
+      sold('a', '2026-07-01T10:00:00Z', C, '20,00'),
+      update('b', '2026-07-03T15:17:00Z', C, "La transaction a été annulée. L'acheteur va recevoir un remboursement."),
+      sold('c', '2026-07-12T21:40:00Z', C, '36,00'),
+      update('d', '2026-07-13T18:27:00Z', C, "Ton colis est en cours d'acheminement vers l'acheteur !"),
+      done('e', '2026-07-28T19:05:00Z', C, '36,00'),
+    ];
+    await syncNow(fakeScript, '2026-10-27');
+    const ds = await loadDataset();
+    const [first, second] = [...ds.sales].sort((x, y) => x.date.localeCompare(y.date));
+    expect(first).toMatchObject({ orderStatus: 'annulee', cancelledAt: '2026-07-03' });
+    expect(second).toMatchObject({ paymentStatus: 'recu', orderStatus: 'terminee', shippedAt: '2026-07-13', sellerRevenue: 3600 });
+    expect(saleBreakdown(ds, second).profit).toBe(3000);
+  });
+});
 
 describe('Script Google', () => {
   it('ne répond qu’avec la bonne clé, filtre la recherche et nettoie le texte', () => {

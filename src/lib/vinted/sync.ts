@@ -30,7 +30,6 @@ import { SELLABLE, type Dataset, type ISODate, type Item, type Sale, type Synced
 import { normTitle, parseVintedEmail, titleSimilarity, type RawEmail, type VintedEvent } from './parse';
 
 export const MATCH_THRESHOLD = 0.75;
-const WAIT_DAYS = 45;
 const NOTE = (d: ISODate) => `Synchronisé depuis l'e-mail Vinted du ${d.split('-').reverse().join('/')}`;
 const now = () => new Date().toISOString();
 
@@ -84,15 +83,67 @@ export function findStockItem(ds: Dataset, title: string): Item | null {
 const saleItems = (ds: Dataset, s: Sale) =>
   ds.saleLines.filter((l) => l.saleId === s.id).map((l) => ds.items.find((i) => i.id === l.itemId)).filter((x): x is Item => !!x);
 
-/** Vente déjà enregistrée qui correspond au titre (filtrée par `accept`), la plus ancienne d'abord. */
-export function findSale(ds: Dataset, title: string, accept: (s: Sale) => boolean): Sale | null {
-  return (
-    ds.sales
-      .filter(accept)
-      .filter((s) => saleItems(ds, s).some((i) => score(i, title) >= MATCH_THRESHOLD))
-      .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null
-  );
+/**
+ * Vente déjà enregistrée qui correspond au titre (filtrée par `accept`).
+ * Par défaut la plus récente : un paiement ou une annulation concerne la dernière vente de cet article.
+ */
+export function findSale(ds: Dataset, title: string, accept: (s: Sale) => boolean, pick: 'latest' | 'oldest' = 'latest'): Sale | null {
+  const list = ds.sales
+    .filter(accept)
+    .filter((s) => saleItems(ds, s).some((i) => score(i, title) >= MATCH_THRESHOLD))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  return (pick === 'latest' ? list[list.length - 1] : list[0]) ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Appariement des e-mails entre eux
+// ---------------------------------------------------------------------------
+
+export interface Pairing {
+  /** e-mail de vente → e-mail qui la clôt (transaction finalisée ou annulée) */
+  closedBy: Map<string, SyncedEmail>;
+  /** e-mail de suite (finalisée, annulée, expédiée) → e-mail de la vente concernée */
+  saleOf: Map<string, SyncedEmail>;
+}
+
+const FOLLOW_UPS = ['completed', 'cancelled', 'shipped'];
+
+/**
+ * Relie chaque paiement / annulation / expédition à la vente qu'il concerne : la dernière vente encore ouverte
+ * du même article avant lui (même titre exact de préférence). Un même article revendu plusieurs fois après
+ * des annulations est ainsi suivi vente par vente. Les ventes écartées à la main ne comptent pas.
+ */
+export function pairEvents(rows: SyncedEmail[]): Pairing {
+  const evs = rows
+    .filter((r) => r.event && (r.kind === 'sale' ? r.status !== 'ignored' : FOLLOW_UPS.includes(r.kind)))
+    .filter((r) => !(r.status === 'ignored' && r.note === VENTE_ECARTEE))
+    .sort((a, b) => a.date.localeCompare(b.date) || ORDER[a.kind as VintedEvent['kind']] - ORDER[b.kind as VintedEvent['kind']] || a.id.localeCompare(b.id));
+  const closedBy = new Map<string, SyncedEmail>();
+  const saleOf = new Map<string, SyncedEmail>();
+  const open: SyncedEmail[] = [];
+  for (const r of evs) {
+    if (r.kind === 'sale') {
+      open.push(r);
+      continue;
+    }
+    const t = normTitle(r.title);
+    let idx = -1;
+    for (let i = open.length - 1; i >= 0; i--) if (normTitle(open[i].title) === t) { idx = i; break; }
+    if (idx < 0) for (let i = open.length - 1; i >= 0; i--) if (titleSimilarity(open[i].title, r.title) >= MATCH_THRESHOLD) { idx = i; break; }
+    if (idx < 0) continue;
+    const sale = open[idx];
+    saleOf.set(r.id, sale);
+    if (r.kind !== 'shipped') {
+      closedBy.set(sale.id, r);
+      open.splice(idx, 1);
+    }
+  }
+  return { closedBy, saleOf };
+}
+
+/** Une vente sans paiement ni annulation depuis ce nombre de jours a sans doute été annulée ou remboursée. */
+export const NO_PAYMENT_DAYS = 21;
+const VENTE_ECARTEE = 'Vente écartée : suite ignorée';
 
 const refunded = (ds: Dataset, saleId: string) => sum(ds.refunds.filter((r) => r.saleId === saleId).map((r) => r.amount));
 const daysBetween = (a: ISODate, b: ISODate) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
@@ -149,7 +200,7 @@ type Outcome = { status: SyncedEmail['status']; ref?: string | null; note: strin
 const ORDER: Record<VintedEvent['kind'], number> = { purchase: 0, sale: 1, shipped: 2, cancelled: 3, completed: 4, invoice: 5, purchase_refund: 6 };
 
 /** Applique tout ce qui peut l'être. Renvoie le résumé de ce qui a été fait. */
-export async function processPending(today: ISODate = new Date().toISOString().slice(0, 10)) {
+export async function processPending(_today: ISODate = new Date().toISOString().slice(0, 10)) {
   const db = getDb();
   const pending = (await db.syncedEmails.where('status').equals('waiting').toArray()).sort(
     (a, b) => a.date.localeCompare(b.date) || ORDER[(a.event as VintedEvent).kind] - ORDER[(b.event as VintedEvent).kind],
@@ -159,7 +210,7 @@ export async function processPending(today: ISODate = new Date().toISOString().s
     const ev = row.event as VintedEvent;
     let out: Outcome;
     try {
-      out = await applyEvent(ev, today);
+      out = await applyEvent(row, ev);
     } catch (e) {
       out = { status: 'inbox', note: e instanceof Error ? e.message : 'Erreur inattendue' };
     }
@@ -176,14 +227,17 @@ export async function processPending(today: ISODate = new Date().toISOString().s
   return summary;
 }
 
-/** Une vente encore à valider porte-t-elle ce titre ? (les événements qui en dépendent attendent alors) */
-async function saleAwaitingValidation(title: string): Promise<boolean> {
-  const rows = await getDb().syncedEmails.where('status').anyOf('inbox', 'waiting').toArray();
-  return rows.some((r) => r.kind === 'sale' && titleSimilarity(r.title, title) >= MATCH_THRESHOLD);
-}
-
-async function applyEvent(ev: VintedEvent, today: ISODate): Promise<Outcome> {
+async function applyEvent(row: SyncedEmail, ev: VintedEvent): Promise<Outcome> {
   const ds = await loadDataset();
+  // vente concernée par un paiement / une annulation / une expédition, d'après les e-mails
+  let linked: Sale | null | undefined; // undefined : aucun e-mail de vente ne correspond
+  if (FOLLOW_UPS.includes(ev.kind)) {
+    const saleRow = pairEvents(await getDb().syncedEmails.toArray()).saleOf.get(row.id);
+    if (saleRow) {
+      if (saleRow.status !== 'applied') return { status: 'waiting', note: 'En attente de la vente correspondante (à valider)' };
+      linked = ds.sales.find((s) => s.id === saleRow.ref) ?? null;
+    }
+  }
   switch (ev.kind) {
     case 'sale': {
       // déjà saisie à la main (même article, à quelques jours près) ?
@@ -200,7 +254,11 @@ async function applyEvent(ev: VintedEvent, today: ISODate): Promise<Outcome> {
     }
 
     case 'completed': {
-      const open = findSale(ds, ev.title, (s) => s.orderStatus !== 'annulee' && s.paymentStatus === 'en_attente' && s.date <= ev.date);
+      if (linked) {
+        if (linked.orderStatus === 'annulee') return { status: 'ignored', note: 'Vente annulée dans l’application' };
+        if (linked.paymentStatus === 'recu') return { status: 'applied', ref: linked.id, note: 'Paiement déjà enregistré' };
+      }
+      const open = linked ?? findSale(ds, ev.title, (s) => s.orderStatus !== 'annulee' && s.paymentStatus === 'en_attente' && s.date <= ev.date);
       if (open) {
         const expected = open.sellerRevenue - refunded(ds, open.id);
         if (ev.amount !== null && ev.amount !== expected && refunded(ds, open.id) === 0)
@@ -211,27 +269,25 @@ async function applyEvent(ev: VintedEvent, today: ISODate): Promise<Outcome> {
       }
       const paid = findSale(ds, ev.title, (s) => s.orderStatus !== 'annulee' && s.paymentStatus === 'recu' && Math.abs(daysBetween(s.date, ev.date)) <= 30);
       if (paid) return { status: 'applied', ref: paid.id, note: 'Paiement déjà enregistré' };
-      if (await saleAwaitingValidation(ev.title)) return waitOrDrop(ev, today, 'En attente de la vente correspondante');
       return { status: 'inbox', note: 'Vente finalisée sans vente enregistrée : indique l’article vendu.' };
     }
 
     case 'shipped': {
-      const s = findSale(ds, ev.title, (x) => x.orderStatus === 'confirmee');
-      if (s) {
+      const s = linked !== undefined ? linked : findSale(ds, ev.title, (x) => x.orderStatus === 'confirmee' && x.date <= ev.date);
+      if (s && s.orderStatus === 'confirmee') {
         await setOrderStatus(s.id, 'expediee', ev.date);
         return { status: 'applied', ref: s.id, note: 'Vente marquée expédiée' };
       }
-      if (await saleAwaitingValidation(ev.title)) return waitOrDrop(ev, today, 'En attente de la vente correspondante');
-      return { status: 'ignored', note: 'Aucune vente à marquer comme expédiée' };
+      return { status: 'ignored', note: s ? 'Vente déjà au-delà de l’expédition' : 'Aucune vente à marquer comme expédiée' };
     }
 
     case 'cancelled': {
-      const s = findSale(ds, ev.title, (x) => x.orderStatus !== 'annulee' && x.paymentStatus === 'en_attente' && refunded(ds, x.id) === 0 && x.date <= ev.date);
+      const cancellable = (x: Sale) => x.orderStatus !== 'annulee' && x.paymentStatus === 'en_attente' && refunded(ds, x.id) === 0;
+      const s = linked !== undefined ? (linked && cancellable(linked) ? linked : null) : findSale(ds, ev.title, (x) => cancellable(x) && x.date <= ev.date);
       if (s) {
         await cancelSale(s.id, ev.date);
         return { status: 'applied', ref: s.id, note: 'Vente annulée, article remis en vente' };
       }
-      if (await saleAwaitingValidation(ev.title)) return waitOrDrop(ev, today, 'En attente de la vente correspondante');
       return { status: 'ignored', note: 'Aucune vente en cours à annuler' };
     }
 
@@ -259,10 +315,6 @@ async function applyEvent(ev: VintedEvent, today: ISODate): Promise<Outcome> {
     case 'purchase_refund':
       return { status: 'inbox', note: 'Un achat Vinted a été remboursé : corrige ou retire l’article correspondant.' };
   }
-}
-
-function waitOrDrop(ev: VintedEvent, today: ISODate, note: string): Outcome {
-  return daysBetween(ev.date, today) > WAIT_DAYS ? { status: 'ignored', note: 'Aucune vente correspondante après 45 jours' } : { status: 'waiting', note };
 }
 
 // ---------------------------------------------------------------------------
@@ -307,9 +359,24 @@ export async function resolveSale(rowId: string, target: { itemId: string } | { 
   return processPending();
 }
 
-export async function dismissSynced(rowId: string) {
-  await getDb().syncedEmails.update(rowId, { status: 'ignored', note: 'Écarté manuellement', resolvedAt: now() });
+export async function dismissSynced(rowIds: string | string[]) {
+  const db = getDb();
+  const ids = Array.isArray(rowIds) ? rowIds : [rowIds];
+  // le paiement / l'annulation / l'expédition d'une vente écartée sont écartés avec elle
+  const pairing = pairEvents(await db.syncedEmails.toArray());
+  const followUps = [...pairing.saleOf].filter(([, sale]) => ids.includes(sale.id)).map(([id]) => id);
+  for (const id of followUps) {
+    const r = await db.syncedEmails.get(id);
+    if (r && r.status !== 'applied') await db.syncedEmails.update(id, { status: 'ignored', note: VENTE_ECARTEE, resolvedAt: now() });
+  }
+  for (const id of ids) await db.syncedEmails.update(id, { status: 'ignored', note: 'Écarté manuellement', resolvedAt: now() });
   return processPending();
+}
+
+/** Ventes « À valider » sans paiement ni annulation reçus depuis NO_PAYMENT_DAYS jours : sans doute remboursées. */
+export function unpaidInboxSales(rows: SyncedEmail[], today: ISODate): SyncedEmail[] {
+  const { closedBy } = pairEvents(rows);
+  return rows.filter((r) => r.status === 'inbox' && r.kind === 'sale' && !closedBy.has(r.id) && daysBetween(r.date, today) >= NO_PAYMENT_DAYS);
 }
 
 // ---------------------------------------------------------------------------

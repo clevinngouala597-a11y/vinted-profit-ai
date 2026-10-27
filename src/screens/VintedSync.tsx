@@ -9,7 +9,7 @@ import { useData } from '../lib/useData';
 import { DEFAULT_CATEGORIES, SELLABLE, type SyncedEmail } from '../lib/types';
 import { appsScriptSource, newSecret } from '../lib/vinted/appsScript';
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
-import { dismissSynced, guessCategory, resolveSale, syncNow, type SyncResult } from '../lib/vinted/sync';
+import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales, type SyncResult } from '../lib/vinted/sync';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, useAction, useUI } from '../ui/kit';
 
 export const syncSummary = (r: SyncResult) =>
@@ -201,20 +201,65 @@ function ScriptPreview({ token, open }: { token: string; open: boolean }) {
 // ---------------------------------------------------------------------------
 
 export function SyncInbox() {
-  const rows = useLiveQuery(() => getDb().syncedEmails.where('status').equals('inbox').sortBy('date'), []);
+  const all = useLiveQuery(() => getDb().syncedEmails.toArray(), []);
+  const ui = useUI();
+  const { error, run, busy } = useAction();
+  const today = todayISO();
+  const view = useMemo(() => {
+    if (!all) return null;
+    const rows = all.filter((r) => r.status === 'inbox').sort((a, b) => a.date.localeCompare(b.date));
+    return { rows, closedBy: pairEvents(all).closedBy, unpaid: unpaidInboxSales(all, today) };
+  }, [all, today]);
+
+  const dismissUnpaid = () => run(async () => {
+    if (!view) return;
+    const n = view.unpaid.length;
+    const ok = await ui.confirm({
+      title: `Ignorer ${n} vente${n > 1 ? 's' : ''} sans paiement ?`,
+      text: `Aucun paiement Vinted n'a été reçu pour ${n > 1 ? 'ces ventes' : 'cette vente'} depuis plus de ${NO_PAYMENT_DAYS} jours : elles ont sans doute été annulées ou remboursées. Vérifie dans Vinted (Mes commandes → « Remboursement effectué ») avant de continuer.`,
+      confirmLabel: 'Ignorer',
+    });
+    if (!ok) return;
+    await dismissSynced(view.unpaid.map((r) => r.id));
+    ui.toast(`${n} vente${n > 1 ? 's' : ''} ignorée${n > 1 ? 's' : ''}`);
+  });
+
   return (
     <>
       <PageHeader title="À valider" sub="Opérations Vinted que je n'ai pas pu enregistrer seul" backTo="" />
-      {!rows ? <div className="skeleton" style={{ height: 160 }} /> : rows.length === 0 ? (
+      <ErrorBox error={error} />
+      {!view ? <div className="skeleton" style={{ height: 160 }} /> : view.rows.length === 0 ? (
         <Empty title="Tout est enregistré" text="Les prochaines ventes et paiements Vinted seront ajoutés automatiquement à chaque ouverture." action={<button className="btn btn-ghost" onClick={() => go('synchro')}>Voir la synchro</button>} />
       ) : (
-        rows.map((r) => <InboxCard key={r.id} row={r} />)
+        <>
+          {view.unpaid.length > 0 && (
+            <div className="alert warn" style={{ marginBottom: 12, display: 'block' }}>
+              <b>{view.unpaid.length} vente{view.unpaid.length > 1 ? 's' : ''} sans paiement reçu</b>
+              <p className="small" style={{ margin: '4px 0 10px' }}>
+                Vinted n'a envoyé ni « transaction finalisée » ni annulation depuis plus de {NO_PAYMENT_DAYS} jours : ce sont sans doute des ventes remboursées. Elles sont marquées « Sans paiement » ci-dessous.
+              </p>
+              <button className="btn btn-ghost btn-sm" disabled={busy} onClick={dismissUnpaid}>Les ignorer toutes</button>
+            </div>
+          )}
+          {view.rows.map((r) => <InboxCard key={r.id} row={r} closure={view.closedBy.get(r.id) ?? null} unpaid={view.unpaid.includes(r)} />)}
+        </>
       )}
     </>
   );
 }
 
-function InboxCard({ row }: { row: SyncedEmail }) {
+function ClosureLine({ row, closure, unpaid }: { row: SyncedEmail; closure: SyncedEmail | null; unpaid: boolean }) {
+  if (row.kind !== 'sale') return null;
+  if (closure?.kind === 'completed') {
+    const amt = (closure.event as VintedEvent & { kind: 'completed' }).amount;
+    return <p className="small pos" style={{ margin: '4px 0 0' }}>✓ Paiement reçu le {formatDate(closure.date)}{amt !== null ? ` (${formatEuros(amt)})` : ''} : il sera enregistré avec la vente.</p>;
+  }
+  if (closure?.kind === 'cancelled') return <p className="small muted" style={{ margin: '4px 0 0' }}>Annulée le {formatDate(closure.date)} : l'article reviendra en vente après validation.</p>;
+  if (unpaid) return <p className="small warn" style={{ margin: '4px 0 0' }}><b>Sans paiement</b> depuis {NO_PAYMENT_DAYS} jours ou plus : sans doute remboursée → Ignorer.</p>;
+  return <p className="small muted" style={{ margin: '4px 0 0' }}>Paiement pas encore reçu (normal pour une vente récente).</p>;
+}
+
+function InboxCard({ row, closure, unpaid }: { row: SyncedEmail; closure: SyncedEmail | null; unpaid: boolean }) {
   const ds = useData();
   const ui = useUI();
   const ev = row.event as VintedEvent;
@@ -254,6 +299,7 @@ function InboxCard({ row }: { row: SyncedEmail }) {
       </div>
       <div style={{ fontWeight: 800, margin: '8px 0 2px' }}>{row.title}</div>
       {amount !== null && <div className="small">Montant : <b>{formatEuros(amount)}</b></div>}
+      <ClosureLine row={row} closure={closure} unpaid={unpaid} />
       <p className="small muted" style={{ margin: '6px 0 10px' }}>{row.note}</p>
       <ErrorBox error={error} />
 
