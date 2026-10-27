@@ -18,6 +18,10 @@ import { Exports } from './screens/Exports';
 import { SettingsScreen, Journal } from './screens/Settings';
 import { Onboarding } from './screens/Onboarding';
 import { Goals } from './screens/Goals';
+import { Import } from './screens/Import';
+import { NotificationsScreen } from './screens/Notifications';
+import { ForecastScreen } from './screens/Forecast';
+import { Fiscal } from './screens/Fiscal';
 
 export function App() {
   const ds = useLiveDataset();
@@ -61,6 +65,10 @@ function Shell() {
     case 'reglages': screen = <SettingsScreen />; break;
     case 'journal': screen = <Journal />; break;
     case 'objectifs': screen = <Goals />; break;
+    case 'import': screen = <Import />; break;
+    case 'notifications': screen = <NotificationsScreen />; break;
+    case 'previsions': screen = <ForecastScreen />; break;
+    case 'fiscal': screen = <Fiscal />; break;
     default: screen = <Home />;
   }
 

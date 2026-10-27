@@ -2,7 +2,7 @@
 
 Application mobile (PWA installable sur iPhone) de comptabilité, de stock et de rentabilité pour l'achat-revente sur Vinted.
 
-**Version 0.2 — Phases 1 et 2 fonctionnelles.** Les données réelles sont enregistrées sur l'appareil et persistent après fermeture.
+**Version 0.4 — Phases 1, 2 et 4 fonctionnelles** (la phase 3, l'assistant IA, attend une clé API). Les données réelles sont enregistrées sur l'appareil et persistent après fermeture.
 
 ## Fonctionnalités opérationnelles
 
@@ -38,6 +38,25 @@ Application mobile (PWA installable sur iPhone) de comptabilité, de stock et de
   - **bilan mensuel PDF** : compte de résultat comparé, stock, trésorerie, objectifs, catégories, ventes, dépenses ;
   - fichiers **CSV** : rapport mensuel, ventes, achats, dépenses, mouvements, inventaire.
 - **Sauvegarde et restauration** complètes en JSON, photos comprises. Journal des opérations et effacement des données confirmé deux fois.
+- **Import CSV** (articles avec achat et vente éventuelle, ou dépenses) :
+  - association automatique des colonnes, modifiable, avec aperçu ;
+  - validation ligne par ligne, rapport des rejets téléchargeable ;
+  - doublons ignorés par défaut, confirmation avant tout enregistrement ;
+  - modèles à remplir fournis.
+- **OCR des justificatifs** : prends le ticket en photo, l'app propose le montant total, la date et le magasin, avec un niveau de confiance. Tu vérifies avant d'enregistrer.
+  - La lecture se fait **dans le téléphone** (tesseract.js) : l'image n'est envoyée nulle part.
+  - Au premier usage, le moteur et le dictionnaire français (environ 2 Mo) sont téléchargés depuis le CDN jsDelivr, puis gardés en cache.
+- **Prévisions** à 30, 60 et 90 jours : scénarios prudent, central et optimiste à partir des semaines récentes, avec hypothèses et limites affichées. Pas de prévision tant que l'historique est trop court.
+- **Centre de notifications** (cloche sur l'accueil) : stock ancien, justificatifs manquants, ventes à perte, paiements ou expéditions en retard, retours non récupérés, objectifs, données manquantes, écart avec les prévisions, rappels fiscaux, sauvegardes.
+  - Chaque type d'alerte peut être désactivé.
+  - Une alerte masquée ne revient que si la situation change.
+- **Fiscalité** :
+  - recettes encaissées (distinctes du bénéfice) et compteur DAC7 ;
+  - selon le statut : alerte achat-revente pour un particulier, ou estimation des cotisations, du versement libératoire et de la base imposable pour un micro-entrepreneur ;
+  - seuils de TVA et de la micro-entreprise, périodes de déclaration Urssaf ;
+  - **livre des recettes**, **registre des achats** et dossier Excel pour l'expert-comptable ;
+  - chaque règle cite sa source officielle et sa date de vérification ;
+  - l'app ne déclare et ne paie jamais rien.
 - **Hors ligne** : l'application s'ouvre sans réseau une fois installée.
 
 Les règles de calcul sont détaillées dans [docs/methodes-de-calcul.md](docs/methodes-de-calcul.md).
@@ -50,8 +69,8 @@ Rien de ce qui suit n'est simulé dans l'application : ces fonctions sont simple
 |---|---|---|
 | Comptes utilisateurs et synchronisation entre appareils | 2 | Un projet Supabase (gratuit). En attendant, utiliser la sauvegarde JSON. |
 | Assistant IA, suggestions de prix, titres et descriptions | 3 | Une clé API Claude, appelée depuis un backend (jamais depuis le téléphone) |
-| Import CSV, OCR des justificatifs | 4 | OCR : service IA ou bibliothèque locale |
-| Prévisions, module fiscal, notifications | 4 | Sources officielles (impots.gouv.fr, urssaf.fr) |
+| Notifications sur l'écran verrouillé (push) | — | Un serveur d'envoi ; les alertes restent pour l'instant dans l'application |
+| Mise à jour automatique des règles fiscales | — | Les règles sont datées dans `src/lib/fiscal.ts` et doivent être revérifiées chaque année |
 
 Aucune connexion à Vinted n'existe ni n'est simulée. Vinted ne propose pas d'API publique pour les commandes. Les données viennent de la saisie manuelle et, plus tard, de l'import de fichiers. Le mot de passe Vinted n'est jamais demandé.
 
@@ -94,7 +113,7 @@ Rythme conseillé : une sauvegarde par semaine, et avant toute mise à jour impo
 
 ## Base de données et migrations
 
-Le schéma IndexedDB est déclaré dans `src/lib/db.ts` (Dexie). Versions : `version(1)` pour le schéma initial, `version(2)` pour l'ajout de la table `goals` (migration automatique, sans perte). Pour faire évoluer le schéma, il faut ajouter un `this.version(2).stores({...}).upgrade(...)` : les données existantes sont alors migrées automatiquement à l'ouverture.
+Le schéma IndexedDB est déclaré dans `src/lib/db.ts` (Dexie). Versions : `version(1)` pour le schéma initial, `version(2)` pour la table `goals`, `version(3)` pour la table `notifications` (alertes masquées). Les migrations sont automatiques et sans perte ; les réglages d'une version antérieure reçoivent les nouvelles valeurs par défaut. Pour faire évoluer le schéma, il faut ajouter un `this.version(2).stores({...}).upgrade(...)` : les données existantes sont alors migrées automatiquement à l'ouverture.
 
 Tables :
 - réglages (`settings`) ;
@@ -107,7 +126,8 @@ Tables :
 - mouvements de stock (`inventoryMovements`) ;
 - pièces jointes (`attachments`) ;
 - journal (`auditLogs`) ;
-- objectifs mensuels (`goals`).
+- objectifs mensuels (`goals`) ;
+- notifications masquées (`notifications`).
 
 ## Structure
 
@@ -119,6 +139,11 @@ src/lib/db.ts         schéma de la base locale
 src/lib/exports.ts    tableaux d'export, CSV, sauvegarde et restauration
 src/lib/office.ts     Excel et PDF (chargés seulement au moment d'exporter)
 src/lib/journal.ts    mise en forme lisible du journal
+src/lib/importer.ts   import CSV (lecture, association des colonnes, validation, doublons)
+src/lib/receipt.ts    OCR des tickets et extraction montant / date / magasin
+src/lib/forecast.ts   prévisions à 30, 60 et 90 jours
+src/lib/notifications.ts  calcul des alertes
+src/lib/fiscal.ts     règles fiscales sourcées, recettes, DAC7, estimations
 src/screens/          écrans
 src/ui/               composants, icônes, graphiques
 tests/                tests unitaires et d'intégration (base IndexedDB simulée)

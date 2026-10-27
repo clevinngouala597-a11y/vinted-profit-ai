@@ -51,6 +51,12 @@ export function defaultSettings(today = todayISO()): Settings {
     safetyReserve: 0,
     staleDays: 30,
     customCategories: [],
+    activityStart: null,
+    vatRegime: 'franchise',
+    declarationFrequency: 'trimestrielle',
+    versementLiberatoire: false,
+    disabledNotifications: [],
+    lastBackupAt: null,
   };
 }
 
@@ -82,7 +88,8 @@ export async function loadDataset(): Promise<Dataset> {
       db.goals.toArray(),
     ]);
   return {
-    settings: settings ?? defaultSettings(),
+    // fusion avec les valeurs par défaut : les réglages créés par une version antérieure restent valides
+    settings: { ...defaultSettings(), ...(settings ?? {}) },
     items,
     purchases,
     purchaseLines,
@@ -418,12 +425,12 @@ export async function correctSale(saleId: string, patch: SaleCorrection, reason:
       else if (s.paymentStatus === 'recu' || !txs.some((t) => t.kind === 'vente'))
         await db.transactions.add(tx({
           date: todayISO(), amount: dRev, kind: 'ajustement', status: s.paymentStatus === 'recu' ? 'confirme' : 'en_attente',
-          refType: 'sale', refId: saleId, label: `Correction du montant encaissé · ${label}`,
+          refType: 'sale', refId: saleId, label: `Correction du montant encaissé · ${label}`, sub: 'recette',
         }));
     }
     if (dCosts !== 0)
       await db.transactions.add(tx({
-        date: todayISO(), amount: -dCosts, kind: 'ajustement', status: 'confirme', refType: 'sale', refId: saleId, label: `Correction des frais de vente · ${label}`,
+        date: todayISO(), amount: -dCosts, kind: 'ajustement', status: 'confirme', refType: 'sale', refId: saleId, label: `Correction des frais de vente · ${label}`, sub: 'frais',
       }));
     if (patch.date && patch.date !== s.date) {
       for (const t of txs) if (t.status === 'en_attente' || t.kind === 'frais_vente') await db.transactions.update(t.id, { date: patch.date });
@@ -736,4 +743,21 @@ export async function wipeAllData() {
     for (const t of DATA_TABLES) await db.table(t).clear();
     await db.attachments.clear();
   });
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+export async function dismissNotification(id: string) {
+  await getDb().notifications.put({ id, dismissedAt: now() });
+}
+
+export async function restoreNotifications() {
+  await getDb().notifications.clear();
+}
+
+export async function toggleNotificationCategory(category: string, enabled: boolean) {
+  const cur = (await loadDataset()).settings.disabledNotifications;
+  await saveSettings({ disabledNotifications: enabled ? cur.filter((c) => c !== category) : [...new Set([...cur, category])] });
 }

@@ -59,3 +59,15 @@ export const IGear = (p: SVGProps<SVGSVGElement>) => (
 export const ITarget = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" /></svg>
 );
+export const IBell = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
+);
+export const IScale = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M12 3v18M5 21h14M3 7h18M6 7l-3 7a3 3 0 0 0 6 0zM18 7l-3 7a3 3 0 0 0 6 0z" /></svg>
+);
+export const ITrend = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="m3 17 6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>
+);
+export const IUpload = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M12 20V9m-5 5 5-5 5 5M4 4h16" /></svg>
+);

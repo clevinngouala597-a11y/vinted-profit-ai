@@ -24,7 +24,10 @@ export function roundHalfAway(x: number, decimals = 0): number {
 export function parseEuros(input: string | number | null | undefined): Cents | null {
   if (input === null || input === undefined) return null;
   if (typeof input === 'number') return Number.isFinite(input) ? roundHalfAway(input * 100) : null;
-  const s = input.replace(/[\s €]/g, '').replace(',', '.');
+  let s = input.replace(/[\s\u00a0\u202f€]/g, '');
+  // séparateur de milliers : « 1.234,56 » ou « 1,234.56 » → le dernier signe est la décimale
+  if (s.includes(',') && s.includes('.')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '') : s.replace(/,/g, '');
+  s = s.replace(',', '.');
   if (s === '') return null;
   if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
   const [intPart, decPart = ''] = s.replace('-', '').split('.');

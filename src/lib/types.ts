@@ -21,6 +21,15 @@ export interface Settings {
   safetyReserve: Cents;
   staleDays: number; // 15 | 30 | 60 | 90
   customCategories: string[];
+  // --- module fiscal ---
+  /** Date de début d'activité déclarée (micro-entreprise), si différente du début du suivi. */
+  activityStart: ISODate | null;
+  vatRegime: 'franchise' | 'assujetti' | 'inconnu';
+  declarationFrequency: 'mensuelle' | 'trimestrielle';
+  versementLiberatoire: boolean;
+  // --- notifications ---
+  disabledNotifications: string[];
+  lastBackupAt: ISOTime | null;
 }
 
 export const DEFAULT_CATEGORIES = [
@@ -228,6 +237,8 @@ export interface Transaction {
   refType: 'purchase' | 'sale' | 'expense' | 'refund' | 'item' | null;
   refId: string | null;
   label: string;
+  /** Pour un ajustement : il corrige une recette (montant encaissé) ou des frais. */
+  sub?: 'recette' | 'frais';
   createdAt: ISOTime;
 }
 
@@ -271,6 +282,12 @@ export interface Goal {
   maxStockCount: number; // stock maximal en fin de mois (objectif de réduction)
   cashToKeep: Cents; // trésorerie minimale à conserver
   updatedAt: ISOTime;
+}
+
+/** Notification masquée par l'utilisateur (les notifications elles-mêmes sont recalculées). */
+export interface NotificationState {
+  id: string;
+  dismissedAt: ISOTime;
 }
 
 /** Ensemble des données de l'utilisateur, utilisé par le moteur de calcul (fonctions pures). */

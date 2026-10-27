@@ -18,6 +18,8 @@ import {
   transactionsTable,
 } from '../lib/exports';
 import { addMonths, formatMonth, monthEnd, monthStart, todayISO } from '../lib/period';
+import { saveSettings } from '../lib/actions';
+import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { IDownload } from '../ui/icons';
 import { ErrorBox, PageHeader, useAction, useUI } from '../ui/kit';
@@ -85,6 +87,11 @@ export function Exports() {
       </div>
       <p className="tiny faint">Ce sont des rapports de gestion interne, pas des documents comptables officiels.</p>
 
+      <h2>Importer</h2>
+      <div className="list">
+        <ExportRow title="Importer un fichier CSV" sub="Articles (achats et ventes) ou dépenses, avec vérification avant import" onClick={() => go('import')} />
+      </div>
+
       <h2>Sauvegarde complète</h2>
       <p className="small muted" style={{ marginTop: 0 }}>
         Tes données sont enregistrées sur cet appareil. Fais une sauvegarde régulièrement (par exemple dans Fichiers ou iCloud Drive) : elle permet de tout restaurer sur un autre appareil.
@@ -97,6 +104,7 @@ export function Exports() {
         <button className="btn btn-primary" disabled={busy} onClick={() => run(async () => {
           const blob = await createBackup(photos);
           downloadBlob(`vinted-profit-ai_sauvegarde_${todayISO()}.json`, blob);
+          await saveSettings({ lastBackupAt: new Date().toISOString() });
           ui.toast('Sauvegarde créée');
         })}>
           <IDownload width={18} height={18} /> Créer une sauvegarde

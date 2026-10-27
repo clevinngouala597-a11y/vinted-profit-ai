@@ -3,13 +3,14 @@ import { useState } from 'react';
 import { getDb } from '../lib/db';
 import { deleteExpense, findDuplicateExpenses, recordExpense, savePhoto } from '../lib/actions';
 import { compressImage } from '../lib/images';
-import { formatEuros, parseEuros } from '../lib/money';
+import { centsToInput, formatEuros, parseEuros } from '../lib/money';
+import type { ReceiptGuess } from '../lib/receipt';
 import { formatDate, todayISO } from '../lib/period';
 import { go, queryParam } from '../lib/router';
 import { useData } from '../lib/useData';
 import { EXPENSE_CATEGORIES, type Expense } from '../lib/types';
 import { BarList } from '../ui/charts';
-import { Empty, ErrorBox, Field, MoneyInput, PageHeader, Sheet, useAction, usePhotoUrl, useUI } from '../ui/kit';
+import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, Sheet, useAction, usePhotoUrl, useUI } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
 
 export function Expenses() {
@@ -99,6 +100,29 @@ export function ExpenseForm() {
   const [saleId, setSaleId] = useState(linkedSale ?? '');
   const [file, setFile] = useState<Blob | null>(null);
   const [fileName, setFileName] = useState('');
+  const [ocr, setOcr] = useState<ReceiptGuess | null>(null);
+  const [reading, setReading] = useState<number | null>(null);
+  const readTicket = () => run(async () => {
+    if (!file) return;
+    setReading(0);
+    try {
+      const { ocrImage, parseReceiptText } = await import('../lib/receipt');
+      let text: string;
+      try {
+        text = await ocrImage(file, setReading);
+      } catch {
+        throw new Error('La lecture du ticket a échoué. Au premier usage, une connexion internet est nécessaire pour télécharger le moteur de lecture.');
+      }
+      const g = parseReceiptText(text, todayISO());
+      setOcr(g);
+      // on ne remplace jamais ce que l'utilisateur a déjà saisi
+      if (g.amount !== null && !amount.trim()) setAmount(centsToInput(g.amount));
+      if (g.date) setDate(g.date);
+      if (g.supplier && !supplier.trim()) setSupplier(g.supplier);
+    } finally {
+      setReading(null);
+    }
+  });
   const { error, run, busy } = useAction();
   const names = new Map(ds.items.map((i) => [i.id, i.name]));
   const recentSales = ds.sales.filter((s) => s.orderStatus !== 'annulee').sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
@@ -124,8 +148,46 @@ export function ExpenseForm() {
     <>
       <PageHeader title="Nouvelle dépense" sub="Hors achats d'articles" backTo="" />
       <ErrorBox error={error} />
+      <Field label="Ticket ou facture (photo ou PDF)" hint="Commence par la photo : je peux lire le montant, la date et le magasin pour toi.">
+        <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
+          {fileName || 'Ajouter un justificatif'}
+          <input type="file" accept="image/*,application/pdf" hidden onChange={async (e) => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (!f) return;
+            setOcr(null);
+            await run(async () => {
+              if (f.size > 10 * 1024 * 1024 && f.type === 'application/pdf') throw new Error('PDF trop lourd (10 Mo maximum).');
+              setFile(f.type.startsWith('image/') ? await compressImage(f) : f);
+              setFileName(f.name);
+            });
+          }} />
+        </label>
+      </Field>
+      {file && file.type.startsWith('image/') && !ocr && (
+        <button className="btn btn-primary" style={{ marginBottom: 12 }} disabled={reading !== null} onClick={readTicket}>
+          {reading === null ? 'Lire le ticket' : `Lecture du ticket… ${Math.round(reading * 100)} %`}
+        </button>
+      )}
+      {ocr && (
+        <div className={`alert ${ocr.amount === null ? 'error' : ocr.amountConfidence === 'haute' ? 'ok' : 'warn'}`} role="status">
+          <span>
+            {ocr.amount === null
+              ? "Je n'ai pas trouvé de montant sur ce ticket : saisis-le à la main."
+              : <>Montant lu : <b>{formatEuros(ocr.amount)}</b>{ocr.amountConfidence === 'haute' ? ' (total confirmé par le paiement)' : ocr.amountConfidence === 'moyenne' ? ' (ligne « total » trouvée)' : ' (incertain : vérifie bien)'}.
+                {ocr.date && <> Date : {formatDate(ocr.date)}.</>}{ocr.supplier && <> Magasin : {ocr.supplier}.</>} Vérifie les champs avant d'enregistrer.</>}
+            {ocr.candidates.length > 1 && (
+              <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                {ocr.candidates.slice(0, 4).map((c) => (
+                  <button key={c} className="chip" aria-pressed={cents(amount) === c} onClick={() => setAmount(centsToInput(c))}>{formatEuros(c)}</button>
+                ))}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
       <div className="cols">
-        <Field label="Montant"><MoneyInput value={amount} onChange={setAmount} autoFocus /></Field>
+        <Field label="Montant"><MoneyInput value={amount} onChange={setAmount} /></Field>
         <Field label="Date"><input type="date" className="input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} /></Field>
       </div>
       <Field label="Catégorie">
@@ -142,20 +204,6 @@ export function ExpenseForm() {
             </option>
           ))}
         </select>
-      </Field>
-      <Field label="Justificatif (photo ou PDF)">
-        <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
-          {fileName || 'Ajouter un justificatif'}
-          <input type="file" accept="image/*,application/pdf" hidden onChange={async (e) => {
-            const f = e.target.files?.[0];
-            if (!f) return;
-            await run(async () => {
-              if (f.size > 10 * 1024 * 1024 && f.type === 'application/pdf') throw new Error('PDF trop lourd (10 Mo maximum).');
-              setFile(f.type.startsWith('image/') ? await compressImage(f) : f);
-              setFileName(f.name);
-            });
-          }} />
-        </label>
       </Field>
       <div className="sticky-actions">
         <button className="btn btn-primary" onClick={submit} disabled={busy}>Enregistrer la dépense</button>

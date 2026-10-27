@@ -1,7 +1,8 @@
 !.env.example
+*.tsbuildinfo
 .DS_Store
 .env
 .env.*
 dist/
 node_modules/
-*.tsbuildinfo
+node_modules/.cache/

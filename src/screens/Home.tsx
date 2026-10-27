@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import {
   cashState,
   goalFor,
-  isAwaitingPayment,
   periodMetrics,
   plEntries,
   reinvestment,
@@ -15,14 +14,16 @@ import { buckets, formatDate, formatRange, monthEnd, monthStart, previousRange }
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { RevenueProfitChart } from '../ui/charts';
-import { ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, ITarget, IWallet } from '../ui/icons';
+import { IBell, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
+import { NotifRow, useNotifications } from './Notifications';
 
 export function Home() {
   const ds = useData();
   const p = usePeriod();
   const [menu, setMenu] = useState(false);
+  const notifs = useNotifications();
 
   const entries = useMemo(() => plEntries(ds), [ds]);
   const m = periodMetrics(ds, p.range.from, p.range.to, entries);
@@ -36,8 +37,6 @@ export function Home() {
   const hasPrev = prev.revenue !== 0 || prev.commercialProfit !== 0;
   const goal = goalFor(ds, p.today.slice(0, 7)).profit;
 
-  const lossSales = ds.sales.filter((s) => s.orderStatus !== 'annulee' && saleBreakdown(ds, s).isLoss);
-  const pendingPay = ds.sales.filter((s) => isAwaitingPayment(ds, s));
   const nothing = ds.items.length === 0 && ds.expenses.length === 0;
 
   return (
@@ -47,9 +46,15 @@ export function Home() {
           <h1>{ds.settings.businessName || 'Mon activité'}</h1>
           <div className="sub">{formatRange(p.range)}</div>
         </div>
-        <button className="icon-btn" aria-label="Menu : dépenses, calculateur, trésorerie, exports, réglages" onClick={() => setMenu(true)}>
-          <IMenu />
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="icon-btn" style={{ position: 'relative' }} aria-label={`Notifications${notifs.visible.length ? ` : ${notifs.visible.length} à traiter` : ''}`} onClick={() => go('notifications')}>
+            <IBell />
+            {notifs.visible.length > 0 && <span className="count-badge">{notifs.visible.length}</span>}
+          </button>
+          <button className="icon-btn" aria-label="Menu : objectifs, prévisions, fiscalité, dépenses, exports, réglages" onClick={() => setMenu(true)}>
+            <IMenu />
+          </button>
+        </div>
       </header>
 
       <PeriodPicker p={p} />
@@ -109,22 +114,14 @@ export function Home() {
       <h2>Évolution</h2>
       <div className="card"><RevenueProfitChart data={chart} /></div>
 
-      {(stock.stale.length > 0 || lossSales.length > 0 || pendingPay.length > 0 || stock.missingTarget > 0) && (
+      {notifs.visible.length > 0 && (
         <>
-          <h2>À surveiller</h2>
+          <div className="row-between">
+            <h2>À surveiller</h2>
+            {notifs.visible.length > 3 && <button className="link" onClick={() => go('notifications')}>Tout voir ({notifs.visible.length})</button>}
+          </div>
           <div className="list">
-            {stock.stale.length > 0 && (
-              <AlertRow tone="warn" title={`${stock.stale.length} article${stock.stale.length > 1 ? 's' : ''} en stock depuis ${ds.settings.staleDays} jours ou plus`} sub={`${formatEuros(stock.stale.reduce((a, i) => a + i.purchasePrice + i.directFees, 0))} immobilisés`} onClick={() => go('stock?filtre=anciens')} />
-            )}
-            {lossSales.length > 0 && (
-              <AlertRow tone="bad" title={`${lossSales.length} vente${lossSales.length > 1 ? 's' : ''} à perte`} sub="Le revenu ne couvre pas le coût de revient et les frais" onClick={() => go('ventes?filtre=perte')} />
-            )}
-            {pendingPay.length > 0 && (
-              <AlertRow tone="warn" title={`${pendingPay.length} paiement${pendingPay.length > 1 ? 's' : ''} en attente`} sub={`${formatEuros(cash.pendingIn)} pas encore dans ta trésorerie`} onClick={() => go('ventes?filtre=attente')} />
-            )}
-            {stock.missingTarget > 0 && (
-              <AlertRow tone="warn" title={`${stock.missingTarget} article${stock.missingTarget > 1 ? 's' : ''} sans prix de vente souhaité`} sub="Nécessaire pour estimer le bénéfice potentiel du stock" onClick={() => go('stock?filtre=sansprix')} />
-            )}
+            {notifs.visible.slice(0, 3).map((n) => <NotifRow key={n.id} n={n} />)}
           </div>
         </>
       )}
@@ -134,9 +131,11 @@ export function Home() {
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />
         <MenuLink icon={<ITarget width={18} height={18} />} title="Objectifs" sub="Bénéfice, ventes, budget, stock" to="objectifs" close={() => setMenu(false)} />
+        <MenuLink icon={<ITrend width={18} height={18} />} title="Prévisions" sub="Trésorerie et résultat à 30, 60, 90 jours" to="previsions" close={() => setMenu(false)} />
+        <MenuLink icon={<IScale width={18} height={18} />} title="Fiscalité" sub="Recettes, seuils, cotisations, livre des recettes" to="fiscal" close={() => setMenu(false)} />
         <MenuLink icon={<ICalc width={18} height={18} />} title="Calculateur de prix" sub="Simule un prix avant de publier" to="calculateur" close={() => setMenu(false)} />
         <MenuLink icon={<IWallet width={18} height={18} />} title="Trésorerie et réinvestissement" sub="Mouvements, réserve, budget d'achat" to="tresorerie" close={() => setMenu(false)} />
-        <MenuLink icon={<IDownload width={18} height={18} />} title="Exports et sauvegarde" sub="CSV pour Excel, sauvegarde complète" to="exports" close={() => setMenu(false)} />
+        <MenuLink icon={<IDownload width={18} height={18} />} title="Exports, import et sauvegarde" sub="Excel, PDF, CSV, import d'un ancien suivi" to="exports" close={() => setMenu(false)} />
         <MenuLink icon={<IGear width={18} height={18} />} title="Réglages" sub="Objectifs, réserve, statut, catégories" to="reglages" close={() => setMenu(false)} />
       </Sheet>
     </>
@@ -170,16 +169,6 @@ function Tile({ k, label, value, note, onClick, tone = '' }: { k: string; label:
     <div className="tile" role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => e.key === 'Enter' && onClick()} style={{ cursor: 'pointer' }}>{body}</div>
   ) : (
     <div className="tile">{body}</div>
-  );
-}
-
-function AlertRow({ tone, title, sub, onClick }: { tone: 'warn' | 'bad'; title: string; sub: string; onClick: () => void }) {
-  return (
-    <button className="li" onClick={onClick}>
-      <span className={`dot ${tone === 'bad' ? 'bad' : 'out'}`} style={tone === 'warn' ? { color: 'var(--warn)', background: 'var(--warn-soft)' } : undefined}>!</span>
-      <span className="li-main"><div className="li-title">{title}</div><div className="li-sub">{sub}</div></span>
-      <IChevron className="faint" />
-    </button>
   );
 }
 

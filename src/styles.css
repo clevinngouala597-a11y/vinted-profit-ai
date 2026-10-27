@@ -245,3 +245,4 @@ table.report th, table.report td { padding: 8px 6px; border-top: 1px solid var(-
 table.report th:first-child, table.report td:first-child { text-align: left; }
 table.report th { color: var(--muted); font-weight: 600; border-top: 0; }
 .scroll-x { overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
+.count-badge { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--green); color: var(--green-ink); font-size: 11px; font-weight: 800; display: grid; place-items: center; }

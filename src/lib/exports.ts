@@ -7,6 +7,7 @@
  */
 import { getDb, DATA_TABLES } from './db';
 import { itemCost, periodMetrics, saleBreakdown } from './engine';
+import { isReceipt } from './fiscal';
 import { formatPercent } from './money';
 import { formatDate, type Range } from './period';
 import { ORDER_LABEL, STATUS_LABEL, type Dataset } from './types';
@@ -135,6 +136,58 @@ export function transactionsTable(ds: Dataset, range: Range | null): Table {
       .filter((t) => inR(t.date, range))
       .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
       .map((t) => [t.date, t.label, TX_KIND[t.kind], TX_STATUS[t.status], t.amount]),
+  };
+}
+
+/** Livre des recettes : recettes encaissées, dans l'ordre chronologique (obligation du micro-entrepreneur). */
+export function receiptsBookTable(ds: Dataset, range: Range | null): Table {
+  const names = new Map(ds.items.map((i) => [i.id, i.name]));
+  const saleItems = (saleId: string | null) =>
+    saleId ? ds.saleLines.filter((l) => l.saleId === saleId).map((l) => names.get(l.itemId)).join(' + ') : '';
+  return {
+    name: 'Livre des recettes',
+    title: 'Livre des recettes',
+    range,
+    filters: 'recettes encaissées (paiements confirmés), remboursements en négatif',
+    definitions: [
+      'Recette = montant réellement encaissé, à la date du paiement. Les ventes dont le paiement est en attente n’y figurent pas encore.',
+      'À compléter si besoin : mode de règlement exact et référence du justificatif (récapitulatif de vente Vinted).',
+    ],
+    columns: [C('Date d’encaissement', 'date'), C('Référence'), C('Nature'), C('Client'), C('Mode de règlement'), C('Montant', 'eur')],
+    rows: ds.transactions
+      .filter((t) => isReceipt(t) && inR(t.date, range))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
+      .map((t) => [
+        t.date,
+        (t.refId ?? '').slice(0, 8).toUpperCase(),
+        `${t.kind === 'remboursement' ? 'Remboursement' : t.kind === 'ajustement' ? 'Correction' : 'Vente'} · ${saleItems(t.refId)}`,
+        'Acheteur Vinted',
+        'Plateforme Vinted',
+        t.amount,
+      ]),
+  };
+}
+
+/** Registre des achats : récapitulatif des achats de marchandises (obligation pour une activité de vente). */
+export function purchasesRegisterTable(ds: Dataset, range: Range | null): Table {
+  return {
+    name: 'Registre des achats',
+    title: 'Registre des achats',
+    range,
+    filters: '',
+    definitions: ['Achats de marchandises destinées à la revente, frais d’achat compris.'],
+    columns: [C('Date', 'date'), C('Fournisseur'), C('Articles'), C('Montant', 'eur'), C('Mode de paiement'), C('Justificatif / notes')],
+    rows: ds.purchases
+      .filter((p) => inR(p.date, range))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((p) => [
+        p.date,
+        p.source,
+        ds.purchaseLines.filter((l) => l.purchaseId === p.id).map((l) => ds.items.find((i) => i.id === l.itemId)?.name).join(' + '),
+        p.itemsTotal + p.commonFees,
+        p.paymentMethod,
+        p.notes,
+      ]),
   };
 }
 

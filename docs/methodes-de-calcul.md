@@ -88,3 +88,41 @@ Disponible pour acheter  = trésorerie confirmée − sorties en attente − ré
   - Une raison est obligatoire, et l'avant/après est inscrit au journal.
   - Le montant encaissé ne peut pas descendre sous le total déjà remboursé.
 - Les ventes annulées et remboursées restent consultables. Une dépense annulée laisse son mouvement de trésorerie marqué « annulé » et une trace dans le journal.
+
+## Prévisions
+
+- **Historique** : jusqu'à 12 semaines complètes, à partir de la première opération réelle (achat ou vente), en s'arrêtant à la veille.
+  - Il faut au moins 4 semaines et 5 ventes ; sinon, aucune prévision n'est affichée.
+- **Pour chaque semaine** : chiffre d'affaires, bénéfice commercial, dépenses générales (pertes comprises) et flux de trésorerie confirmé.
+- **Scénarios** : central = moyenne hebdomadaire, prudent = 1er quartile, optimiste = 3e quartile. Chacun est multiplié par le nombre de semaines de l'horizon (30, 60 ou 90 jours ÷ 7).
+- **Résultat** = bénéfice du scénario − dépenses générales moyennes.
+- **Trésorerie finale** = solde confirmé + flux du scénario + sorties en attente. Les paiements en attente sont ajoutés, sauf dans le scénario prudent.
+- **Alerte d'écart** (à partir du 10e jour du mois) : le bénéfice du mois est comparé au rythme des semaines précédant le mois. L'alerte se déclenche s'il est sous le scénario prudent.
+
+## Fiscalité
+
+- **Recettes encaissées** = ventes dont le paiement est confirmé (à la date du paiement) − remboursements + corrections du montant encaissé.
+  - C'est la base des estimations du micro-entrepreneur. Ce n'est pas le bénéfice commercial.
+- **Compteur DAC7** : ventes non annulées et montants encaissés de l'année civile.
+  - La plateforme transmet à partir de 30 ventes, ou dès que le montant dépasse 2 000 €.
+  - C'est un compteur approché, d'après les saisies.
+- **Micro-entrepreneur** :
+  - cotisations = recettes × 12,3 % ; formation professionnelle = recettes × 0,1 % ;
+  - versement libératoire = recettes × 1 %, si l'option est cochée ;
+  - sans versement libératoire, revenu à déclarer = recettes × (1 − 71 %).
+- **Particulier ou autre statut** : aucun taux n'est appliqué.
+- Les règles chiffrées, leurs sources et leur date de vérification sont regroupées dans `src/lib/fiscal.ts`.
+
+## Import CSV
+
+- Un article importé crée un achat (source « Import CSV », ligne d'origine dans les notes).
+  - Si la date et le montant de vente sont présents, il crée aussi une vente dont le paiement est reçu, marquée terminée.
+  - Le calcul est identique à une saisie manuelle.
+- **Lignes rejetées** : nom, date ou prix illisible ; date future ; vente avant l'achat ; montant de vente sans date (ou l'inverse).
+- **Doublons** :
+  - article : même nom, même date d'achat et même prix ;
+  - dépense : même montant, même fournisseur ou même catégorie, à un jour près.
+  - Ils sont ignorés par défaut.
+- **Formats acceptés** :
+  - dates : 31/12/2026, 31/12/26, 31.12.2026 ou 2026-12-31 ;
+  - montants : « 12,50 », « 12.50 », « 1 234,56 € », « 1.234,56 » ou « 1,234.56 ».
