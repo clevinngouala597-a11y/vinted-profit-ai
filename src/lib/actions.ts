@@ -401,18 +401,24 @@ export async function recordRefund(input: RefundInput): Promise<string> {
       notes: input.notes?.trim() ?? '',
       createdAt: now(),
     });
-    if (input.amount > 0)
-      await db.transactions.add(
-        tx({
-          date: input.date,
-          amount: -input.amount,
-          kind: 'remboursement',
-          status: sale!.paymentStatus === 'recu' ? 'confirme' : 'en_attente',
-          refType: 'refund',
-          refId: input.saleId,
-          label: 'Remboursement',
-        }),
-      );
+    if (input.amount > 0) {
+      const pendingIn = sale!.paymentStatus === 'en_attente'
+        ? await db.transactions.where('refId').equals(input.saleId).filter((t) => t.kind === 'vente' && t.status === 'en_attente').first()
+        : undefined;
+      if (pendingIn) {
+        // paiement pas encore reçu : le remboursement réduit simplement la somme attendue
+        const left = pendingIn.amount - input.amount;
+        await db.transactions.update(pendingIn.id, {
+          amount: left,
+          status: left === 0 ? 'annule' : 'en_attente',
+          label: `${pendingIn.label.replace(/ \(après remboursement\)$/, '')} (après remboursement)`,
+        });
+      } else {
+        await db.transactions.add(
+          tx({ date: input.date, amount: -input.amount, kind: 'remboursement', status: 'confirme', refType: 'refund', refId: input.saleId, label: 'Remboursement' }),
+        );
+      }
+    }
     if (input.extraCosts > 0)
       await db.transactions.add(
         tx({ date: input.date, amount: -input.extraCosts, kind: 'frais_vente', status: 'confirme', refType: 'refund', refId: input.saleId, label: 'Frais de retour' }),

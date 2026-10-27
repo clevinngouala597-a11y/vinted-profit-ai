@@ -19,11 +19,15 @@ import {
 import {
   cashState,
   estimate,
+  isAwaitingPayment,
   periodMetrics,
+  plEntries,
+  profitBy,
   reinvestment,
   saleBreakdown,
   splitPurchase,
   stockState,
+  stockValueAt,
 } from '../src/lib/engine';
 import { percent } from '../src/lib/money';
 
@@ -147,6 +151,21 @@ describe('Cas E — remboursement', () => {
     await expect(recordRefund({ saleId, date: D, amount: 1, itemRecovered: false, extraCosts: 0 })).rejects.toThrow();
   });
 
+  it('remboursement avant paiement : la somme attendue diminue, pas de double mouvement', async () => {
+    await saveSettings({ initialCash: 10000 });
+    const id = await buyOne(1000);
+    const saleId = await sell([id], 2500, 0, 'en_attente');
+    await recordRefund({ saleId, date: D, amount: 2500, itemRecovered: true, extraCosts: 0 });
+    const ds = await loadDataset();
+    const cash = cashState(ds);
+    expect(cash.pendingIn).toBe(0);
+    expect(cash.pendingOut).toBe(0);
+    expect(cash.balance).toBe(9000);
+    expect(isAwaitingPayment(ds, ds.sales[0])).toBe(false);
+    // l'analyse par catégorie ne garde aucun bénéfice fantôme
+    expect(profitBy(plEntries(ds), FROM, TO, 'category')).toEqual([{ name: 'Sweats et pulls', revenue: 0, profit: 0, count: 0 }]);
+  });
+
   it('remboursement partiel sans retour', async () => {
     const id = await buyOne(1000);
     const saleId = await sell([id], 2500);
@@ -170,6 +189,8 @@ describe('Cas F — trésorerie et stock', () => {
     expect(cash.balance).toBe(5000 - 1500 - 200); // le paiement n'est pas encore reçu
     expect(cash.pendingIn).toBe(3000);
     expect(stockState(ds, D).count).toBe(0);
+    expect(stockValueAt(ds, '2026-10-09')).toEqual({ count: 0, value: 0 }); // avant l'achat
+    expect(stockValueAt(ds, D)).toEqual({ count: 0, value: 0 }); // acheté et vendu le même jour
 
     await markPaymentReceived(saleId, D);
     ds = await loadDataset();
@@ -209,6 +230,12 @@ describe('Ventes groupées et lots', () => {
     expect(m.itemsSold).toBe(2);
     expect(m.commercialProfit).toBe(2701 - (550 + 275) - 101);
     expect(stockState(ds, D).count).toBe(1);
+  });
+
+  it("lot avec un article sans prix souhaité : parts égales, aucun article à coût nul", () => {
+    const r = splitPurchase([{ price: null, targetPrice: 4000 }, { price: null, targetPrice: 4000 }, { price: null, targetPrice: null }], 300, 3000);
+    expect(r.map((x) => x.price)).toEqual([1000, 1000, 1000]);
+    expect(r.map((x) => x.fees)).toEqual([100, 100, 100]);
   });
 
   it('répartit les frais communs à parts égales si tous les prix sont nuls', () => {

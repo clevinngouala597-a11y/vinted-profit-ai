@@ -88,8 +88,10 @@ export function splitPurchase(
   commonFees: Cents,
   lotPrice: Cents | null,
 ): { price: Cents; fees: Cents }[] {
-  const prices =
-    lotPrice !== null ? allocate(lotPrice, lines.map((l) => l.targetPrice ?? 0)) : lines.map((l) => l.price ?? 0);
+  // un article sans prix souhaité ne doit pas recevoir un coût nul : dans ce cas, parts égales pour tout le lot
+  const targets = lines.map((l) => l.targetPrice ?? 0);
+  const lotWeights = targets.every((t) => t > 0) ? targets : lines.map(() => 1);
+  const prices = lotPrice !== null ? allocate(lotPrice, lotWeights) : lines.map((l) => l.price ?? 0);
   const fees = allocate(commonFees, prices);
   return prices.map((p, k) => ({ price: p, fees: fees[k] }));
 }
@@ -147,6 +149,13 @@ export function saleBreakdown(ds: Dataset, sale: Sale): SaleBreakdown {
   };
 }
 
+/** Vente dont un paiement est encore attendu (non annulée, non intégralement remboursée). */
+export function isAwaitingPayment(ds: Dataset, sale: Sale): boolean {
+  if (sale.paymentStatus !== 'en_attente' || sale.orderStatus === 'annulee') return false;
+  const refunded = sum(ds.refunds.filter((r) => r.saleId === sale.id).map((r) => r.amount));
+  return sale.sellerRevenue - refunded > 0;
+}
+
 // ---------------------------------------------------------------------------
 // Écritures de résultat datées (pour l'analyse par période)
 // ---------------------------------------------------------------------------
@@ -192,7 +201,14 @@ export function plEntries(ds: Dataset): PLEntry[] {
       });
     });
     for (const r of ds.refunds.filter((x) => x.saleId === sale.id)) {
-      out.push({ ...zero, date: r.date, revenue: -r.amount, saleCosts: r.extraCosts });
+      // remboursement réparti sur les articles comme le revenu, pour que l'analyse par catégorie reste juste
+      const w = lines.map((l) => (l.revenue > 0 ? l.revenue : 1));
+      const back = allocate(r.amount, w);
+      const extra = allocate(r.extraCosts, w);
+      lines.forEach((l, k) => {
+        const it = itemById.get(l.itemId);
+        out.push({ ...zero, date: r.date, revenue: -back[k], saleCosts: extra[k], category: it?.category, brand: it?.brand });
+      });
       if (r.itemRecovered) {
         lines.forEach((l) => {
           const it = itemById.get(l.itemId);
@@ -330,6 +346,32 @@ export function stockState(ds: Dataset, today: ISODate): StockState {
     unpublished: items.filter((i) => ['achete', 'a_preparer', 'pret', 'retourne'].includes(i.status)).length,
     toPrepare: items.filter((i) => i.status === 'a_preparer').length,
   };
+}
+
+/** Valeur du stock (au coût) à la fin d'une journée donnée, reconstituée à partir de l'historique. */
+export function stockValueAt(ds: Dataset, date: ISODate): { count: number; value: Cents } {
+  const exits = new Map<string, ISODate>();
+  const backs = new Map<string, ISODate>();
+  for (const s of ds.sales) {
+    if (s.orderStatus === 'annulee') continue;
+    const rec = ds.refunds.find((r) => r.saleId === s.id && r.itemRecovered);
+    for (const l of ds.saleLines.filter((x) => x.saleId === s.id)) {
+      exits.set(l.itemId, s.date);
+      if (rec) backs.set(l.itemId, rec.recoveredAt ?? rec.date);
+    }
+  }
+  let count = 0;
+  let value = 0;
+  for (const i of ds.items) {
+    if (i.status === 'a_acheter' || i.purchaseDate > date) continue;
+    if (i.writtenOffAt && i.writtenOffAt <= date) continue;
+    const out = exits.get(i.id);
+    const back = backs.get(i.id);
+    if (out && out <= date && !(back && back <= date)) continue;
+    count++;
+    value += itemCost(i);
+  }
+  return { count, value };
 }
 
 export interface Reinvest {

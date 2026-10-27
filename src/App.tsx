@@ -1,0 +1,111 @@
+import { useState } from 'react';
+import { go, useRoute } from './lib/router';
+import { DataContext, useLiveDataset } from './lib/useData';
+import { IBox, IChart, IHome, IPlus, ITag, ICart, IReceipt } from './ui/icons';
+import { Sheet, UIProvider } from './ui/kit';
+import { Home } from './screens/Home';
+import { Stock } from './screens/Stock';
+import { ItemDetail } from './screens/ItemDetail';
+import { Sales } from './screens/Sales';
+import { SaleDetail } from './screens/SaleDetail';
+import { Bilan } from './screens/Bilan';
+import { PurchaseForm } from './screens/PurchaseForm';
+import { SaleForm } from './screens/SaleForm';
+import { ExpenseForm, Expenses } from './screens/Expenses';
+import { Calculator } from './screens/Calculator';
+import { Treasury } from './screens/Treasury';
+import { Exports } from './screens/Exports';
+import { SettingsScreen, Journal } from './screens/Settings';
+import { Onboarding } from './screens/Onboarding';
+
+export function App() {
+  const ds = useLiveDataset();
+  if (!ds) {
+    return (
+      <div className="app page" aria-busy="true">
+        <div className="skeleton" style={{ height: 36, width: '50%', marginBottom: 18 }} />
+        <div className="skeleton" style={{ height: 170, marginBottom: 12 }} />
+        <div className="grid2">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 80 }} />)}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <DataContext.Provider value={ds}>
+      <UIProvider>
+        <div className="app">{ds.settings.onboarded ? <Shell /> : <Onboarding />}</div>
+      </UIProvider>
+    </DataContext.Provider>
+  );
+}
+
+function Shell() {
+  const [r0, r1] = useRoute();
+  const [addOpen, setAddOpen] = useState(false);
+
+  let screen;
+  switch (r0) {
+    case undefined: screen = <Home />; break;
+    case 'stock': screen = r1 ? <ItemDetail id={r1} /> : <Stock />; break;
+    case 'ventes': screen = r1 ? <SaleDetail id={r1} /> : <Sales />; break;
+    case 'bilan': screen = <Bilan />; break;
+    case 'achat': screen = <PurchaseForm />; break;
+    case 'vente': screen = <SaleForm />; break;
+    case 'depense': screen = <ExpenseForm />; break;
+    case 'depenses': screen = <Expenses />; break;
+    case 'calculateur': screen = <Calculator />; break;
+    case 'tresorerie': screen = <Treasury />; break;
+    case 'exports': screen = <Exports />; break;
+    case 'reglages': screen = <SettingsScreen />; break;
+    case 'journal': screen = <Journal />; break;
+    default: screen = <Home />;
+  }
+
+  const tab = r0 === 'stock' ? 'stock' : r0 === 'ventes' ? 'ventes' : r0 === 'bilan' ? 'bilan' : r0 === undefined ? 'home' : '';
+  const pick = (path: string) => {
+    setAddOpen(false);
+    go(path);
+  };
+
+  return (
+    <>
+      <main className="page" key={r0 + (r1 ?? '')}>{screen}</main>
+      <nav className="tabbar" aria-label="Navigation principale">
+        <div className="tabbar-inner">
+          <TabLink to="" label="Accueil" current={tab === 'home'} icon={<IHome />} />
+          <TabLink to="stock" label="Stock" current={tab === 'stock'} icon={<IBox />} />
+          <button className="tab-add" aria-label="Ajouter un achat, une vente ou une dépense" onClick={() => setAddOpen(true)}>
+            <IPlus width={26} height={26} />
+          </button>
+          <TabLink to="ventes" label="Ventes" current={tab === 'ventes'} icon={<ITag />} />
+          <TabLink to="bilan" label="Bilan" current={tab === 'bilan'} icon={<IChart />} />
+        </div>
+      </nav>
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Ajouter">
+        <p className="muted small" style={{ marginTop: 0 }}>Chaque opération met à jour le stock, le bénéfice et la trésorerie.</p>
+        <button className="menu-item" onClick={() => pick('achat')}>
+          <span className="dot in"><ICart width={18} height={18} /></span>
+          <span><div className="mi-title">Un achat</div><div className="mi-sub">Un article ou un lot, avec ses frais</div></span>
+        </button>
+        <button className="menu-item" onClick={() => pick('vente')}>
+          <span className="dot in"><ITag width={18} height={18} /></span>
+          <span><div className="mi-title">Une vente</div><div className="mi-sub">Un ou plusieurs articles du stock</div></span>
+        </button>
+        <button className="menu-item" onClick={() => pick('depense')}>
+          <span className="dot out"><IReceipt width={18} height={18} /></span>
+          <span><div className="mi-title">Une dépense</div><div className="mi-sub">Emballage, matériel, déplacement…</div></span>
+        </button>
+      </Sheet>
+    </>
+  );
+}
+
+function TabLink({ to, label, icon, current }: { to: string; label: string; icon: React.ReactNode; current: boolean }) {
+  return (
+    <a className="tab" href={`#/${to}`} aria-current={current ? 'page' : undefined} style={{ textDecoration: 'none' }}>
+      {icon}
+      {label}
+    </a>
+  );
+}
