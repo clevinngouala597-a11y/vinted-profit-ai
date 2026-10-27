@@ -89,9 +89,9 @@ npm run build      # vérification TypeScript + build de production dans dist/
 
 ## Déploiement (GitHub Pages)
 
-Le workflow `.github/workflows/deploy.yml` lance les tests, construit l'application et la publie à chaque push sur `main`.
+Le workflow `.github/workflows/deploy.yml` lance les tests, construit l'application, puis publie le résultat sur la branche `gh-pages` à chaque push sur `main`. GitHub Pages sert cette branche.
 
-À faire une seule fois : dans le dépôt GitHub, **Settings → Pages → Source : GitHub Actions**.
+Si la page n'apparaît pas, vérifie une fois dans **Settings → Pages** que la source est « Deploy from a branch », branche `gh-pages`, dossier `/ (root)`.
 
 L'application est ensuite servie à l'adresse `https://<compte>.github.io/vinted-profit-ai/`.
 
