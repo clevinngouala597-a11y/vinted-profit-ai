@@ -55,6 +55,12 @@ export interface Settings {
   printedLabels: string[];
   /** Format d'impression des bordereaux. */
   labelFormat: 'etiquette' | 'a4';
+  /** Clé API Claude (annonces par IA), gardée sur l'appareil et dans les sauvegardes de l'utilisateur. */
+  anthropicKey: string;
+  /** Modèles de messages modifiés par l'utilisateur (identifiant → texte). */
+  messageTemplates: Record<string, string>;
+  /** Un article en vente sans bouger depuis ce nombre de jours est proposé à la republication. */
+  republishDays: number;
 }
 
 export const DEFAULT_CATEGORIES = [

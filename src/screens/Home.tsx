@@ -17,7 +17,7 @@ import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { labelList, labelsToPrint } from '../lib/vinted/labels';
 import { RevenueProfitChart } from '../ui/charts';
-import { IChart as IChartBar, IBell, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
+import { IChart as IChartBar, ITag, IBell, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
 import { NotifRow, useNotifications } from './Notifications';
@@ -162,6 +162,11 @@ export function Home() {
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />
+        <MenuLink icon={<ITag width={18} height={18} />} title="Annonce IA" sub="Titre, description et prix à partir de tes photos" to="annonce" close={() => setMenu(false)} />
+        <MenuLink icon={<ITag width={18} height={18} />} title="Photos IA" sub="Prompts pour des photos réalistes" to="photos" close={() => setMenu(false)} />
+        <MenuLink icon={<IMail width={18} height={18} />} title="Messages prêts" sub="Remerciement, relance, contre-offre…" to="messages" close={() => setMenu(false)} />
+        <MenuLink icon={<ITrend width={18} height={18} />} title="À republier" sub="Articles qui ne bougent pas" to="republier" close={() => setMenu(false)} />
+        <MenuLink icon={<IChartBar width={18} height={18} />} title="Résumé du mois" sub="Ton mois en une image" to="resume" close={() => setMenu(false)} />
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Bordereaux à imprimer" sub="Tous tes bordereaux Vinted en un seul PDF" to="bordereaux" close={() => setMenu(false)} />
         <MenuLink icon={<IMail width={18} height={18} />} title="Synchro Vinted (Gmail)" sub={ds.settings.syncUrl ? 'Active : ventes et achats enregistrés seuls' : 'Enregistre tes ventes sans les saisir'} to="synchro" close={() => setMenu(false)} />
         <MenuLink icon={<ITarget width={18} height={18} />} title="Objectifs" sub="Bénéfice, ventes, budget, stock" to="objectifs" close={() => setMenu(false)} />

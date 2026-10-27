@@ -71,6 +71,9 @@ export function defaultSettings(today = todayISO()): Settings {
     syncedFrom: null,
     printedLabels: [],
     labelFormat: 'etiquette',
+    anthropicKey: '',
+    messageTemplates: {},
+    republishDays: 7,
   };
 }
 
@@ -130,8 +133,8 @@ export async function saveSettings(patch: Partial<Settings>) {
   const next = { ...cur, ...patch, id: 'main' as const };
   await db.settings.put(next);
   // la clé secrète de synchronisation n'apparaît jamais dans le journal
-  const { syncToken: _hidden, ...visible } = patch;
-  await audit('settings', 'main', 'modification', JSON.stringify(_hidden !== undefined ? { ...visible, syncToken: '••••' } : visible));
+  const { syncToken: _hidden, anthropicKey: _key, ...visible } = patch;
+  await audit('settings', 'main', 'modification', JSON.stringify({ ...visible, ...(_hidden !== undefined ? { syncToken: '••••' } : {}), ...(_key !== undefined ? { anthropicKey: '••••' } : {}) }));
   return next;
 }
 
@@ -794,6 +797,16 @@ export async function updateItem(id: string, patch: Partial<Item>) {
   await db.items.update(id, { ...clean, updatedAt: now() });
   const changed = Object.keys(clean).filter((k) => (cur as unknown as Record<string, unknown>)[k] !== (clean as Record<string, unknown>)[k]);
   if (changed.length) await audit('item', id, 'modification', changed.join(', '));
+}
+
+/** Article republié sur Vinted : la date de mise en ligne repart d'aujourd'hui, avec éventuellement un nouveau prix. */
+export async function markRepublished(id: string, newPrice: Cents | null, date: ISODate = todayISO()) {
+  const db = getDb();
+  const it = await db.items.get(id);
+  if (!it) fail('Article introuvable.');
+  if (newPrice !== null) nonNeg(newPrice, 'Le prix');
+  await db.items.update(id, { listedAt: date, status: 'en_vente', ...(newPrice !== null ? { targetPrice: newPrice } : {}), updatedAt: now() });
+  await audit('item', id, 'republié', newPrice !== null ? `nouveau prix ${newPrice} c` : date);
 }
 
 /**

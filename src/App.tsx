@@ -25,6 +25,11 @@ import { ForecastScreen } from './screens/Forecast';
 import { Fiscal } from './screens/Fiscal';
 import { Labels } from './screens/Labels';
 import { Stats } from './screens/Stats';
+import { Listing } from './screens/Listing';
+import { PhotoPrompts } from './screens/PhotoPrompts';
+import { Messages } from './screens/Messages';
+import { Republish } from './screens/Republish';
+import { MonthCard } from './screens/MonthCard';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
 import { useUI } from './ui/kit';
@@ -73,6 +78,11 @@ function Shell() {
     case 'couts': screen = <MissingCosts />; break;
     case 'bordereaux': screen = <Labels />; break;
     case 'statistiques': screen = <Stats />; break;
+    case 'annonce': screen = <Listing />; break;
+    case 'photos': screen = <PhotoPrompts />; break;
+    case 'messages': screen = <Messages />; break;
+    case 'republier': screen = <Republish />; break;
+    case 'resume': screen = <MonthCard />; break;
     default: screen = <Home />;
   }
 

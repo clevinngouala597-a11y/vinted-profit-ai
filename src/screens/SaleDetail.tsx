@@ -91,6 +91,7 @@ export function SaleDetail({ id }: { id: string }) {
               }}>Article retourné et récupéré</button>
             )}
             {active && remaining > 0 && <button className="btn btn-ghost" onClick={() => setRefundOpen(true)}>Enregistrer un retour ou un remboursement</button>}
+            {active && <button className="btn btn-ghost" onClick={() => go(`messages?vente=${id}`)}>💬 Message à l'acheteur</button>}
             {active && <button className="btn btn-ghost" onClick={() => go(`depense?vente=${id}`)}>Ajouter une dépense liée à cette vente</button>}
           </div>
         </>
