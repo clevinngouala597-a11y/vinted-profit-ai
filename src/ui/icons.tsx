@@ -71,3 +71,6 @@ export const ITrend = (p: SVGProps<SVGSVGElement>) => (
 export const IUpload = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M12 20V9m-5 5 5-5 5 5M4 4h16" /></svg>
 );
+export const IMail = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
+);

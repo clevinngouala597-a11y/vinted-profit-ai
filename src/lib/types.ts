@@ -30,6 +30,12 @@ export interface Settings {
   // --- notifications ---
   disabledNotifications: string[];
   lastBackupAt: ISOTime | null;
+  // --- synchronisation des e-mails Vinted (script Google) ---
+  syncUrl: string;
+  syncToken: string;
+  /** Les e-mails antérieurs à cette date ne sont pas importés. */
+  syncSince: ISODate | null;
+  lastSyncAt: ISOTime | null;
 }
 
 export const DEFAULT_CATEGORIES = [
@@ -282,6 +288,22 @@ export interface Goal {
   maxStockCount: number; // stock maximal en fin de mois (objectif de réduction)
   cashToKeep: Cents; // trésorerie minimale à conserver
   updatedAt: ISOTime;
+}
+
+/** E-mail Vinted déjà lu, et ce qu'il est devenu. */
+export interface SyncedEmail {
+  id: string; // identifiant Gmail du message
+  kind: string;
+  date: ISODate;
+  title: string;
+  /** Événement extrait (voir src/lib/vinted/parse.ts). */
+  event: unknown;
+  /** applied : enregistré ; inbox : à valider ; waiting : attend une vente encore à valider ; ignored : écarté. */
+  status: 'applied' | 'inbox' | 'waiting' | 'ignored';
+  ref: string | null;
+  note: string;
+  createdAt: ISOTime;
+  resolvedAt: ISOTime | null;
 }
 
 /** Notification masquée par l'utilisateur (les notifications elles-mêmes sont recalculées). */

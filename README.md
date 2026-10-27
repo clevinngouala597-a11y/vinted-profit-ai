@@ -40,6 +40,19 @@ Application mobile (PWA installable sur iPhone) de comptabilité, de stock et de
   - **bilan mensuel PDF** : compte de résultat comparé, stock, trésorerie, objectifs, catégories, ventes, dépenses ;
   - fichiers **CSV** : rapport mensuel, ventes, achats, dépenses, mouvements, inventaire.
 - **Sauvegarde et restauration** complètes en JSON, photos comprises. Journal des opérations et effacement des données confirmé deux fois.
+- **Synchro automatique avec Gmail** (menu → Synchro Vinted) : à chaque ouverture, l'app lit tes e-mails Vinted et enregistre seule :
+  - les ventes, avec le paiement en attente ;
+  - le paiement reçu, avec le montant réellement viré ;
+  - les expéditions et les annulations ;
+  - les factures de boost, en dépenses ;
+  - les achats faits sur Vinted, frais de port et protection inclus dans le coût.
+
+  Une vente dont l'article n'est pas reconnu dans le stock va dans « À valider » : tu choisis l'article, ou tu indiques son coût. Les paiements et expéditions de cette vente s'appliquent ensuite seuls. Une vente déjà saisie à la main n'est jamais enregistrée deux fois.
+
+  Fonctionnement :
+  - un script Google Apps Script, installé une fois dans **ton** compte Google, lit uniquement les e-mails Vinted utiles ;
+  - il ne répond qu'avec une clé secrète générée par l'app ;
+  - le mot de passe Vinted n'est jamais utilisé, et rien ne passe par un serveur tiers.
 - **Import CSV** (articles avec achat et vente éventuelle, ou dépenses) :
   - association automatique des colonnes, modifiable, avec aperçu ;
   - validation ligne par ligne, rapport des rejets téléchargeable ;
@@ -71,6 +84,7 @@ Rien de ce qui suit n'est simulé dans l'application : ces fonctions sont simple
 |---|---|---|
 | Comptes utilisateurs et synchronisation entre appareils | 2 | Un projet Supabase (gratuit). En attendant, utiliser la sauvegarde JSON. |
 | Assistant IA, suggestions de prix, titres et descriptions | 3 | Une clé API Claude, appelée depuis un backend (jamais depuis le téléphone) |
+| Synchro sans ouvrir l'app (en arrière-plan) | — | Un serveur ; aujourd'hui la synchro se fait à chaque ouverture |
 | Notifications sur l'écran verrouillé (push) | — | Un serveur d'envoi ; les alertes restent pour l'instant dans l'application |
 | Mise à jour automatique des règles fiscales | — | Les règles sont datées dans `src/lib/fiscal.ts` et doivent être revérifiées chaque année |
 
@@ -115,7 +129,7 @@ Rythme conseillé : une sauvegarde par semaine, et avant toute mise à jour impo
 
 ## Base de données et migrations
 
-Le schéma IndexedDB est déclaré dans `src/lib/db.ts` (Dexie). Versions : `version(1)` pour le schéma initial, `version(2)` pour la table `goals`, `version(3)` pour la table `notifications` (alertes masquées). Les migrations sont automatiques et sans perte ; les réglages d'une version antérieure reçoivent les nouvelles valeurs par défaut. Pour faire évoluer le schéma, il faut ajouter un `this.version(2).stores({...}).upgrade(...)` : les données existantes sont alors migrées automatiquement à l'ouverture.
+Le schéma IndexedDB est déclaré dans `src/lib/db.ts` (Dexie). Versions : `version(1)` pour le schéma initial, `version(2)` pour la table `goals`, `version(3)` pour la table `notifications` (alertes masquées), `version(4)` pour la table `syncedEmails` (e-mails Vinted déjà lus). Les migrations sont automatiques et sans perte ; les réglages d'une version antérieure reçoivent les nouvelles valeurs par défaut. Pour faire évoluer le schéma, il faut ajouter un `this.version(2).stores({...}).upgrade(...)` : les données existantes sont alors migrées automatiquement à l'ouverture.
 
 Tables :
 - réglages (`settings`) ;
@@ -129,7 +143,8 @@ Tables :
 - pièces jointes (`attachments`) ;
 - journal (`auditLogs`) ;
 - objectifs mensuels (`goals`) ;
-- notifications masquées (`notifications`).
+- notifications masquées (`notifications`) ;
+- e-mails Vinted synchronisés (`syncedEmails`).
 
 ## Structure
 
@@ -146,6 +161,7 @@ src/lib/receipt.ts    OCR des tickets et extraction montant / date / magasin
 src/lib/forecast.ts   prévisions à 30, 60 et 90 jours
 src/lib/notifications.ts  calcul des alertes
 src/lib/fiscal.ts     règles fiscales sourcées, recettes, DAC7, estimations
+src/lib/vinted/       synchro Gmail : lecture des e-mails Vinted, association au stock, script Google
 src/screens/          écrans
 src/ui/               composants, icônes, graphiques
 tests/                tests unitaires et d'intégration (base IndexedDB simulée)

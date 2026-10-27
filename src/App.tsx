@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { go, useRoute } from './lib/router';
 import { DataContext, useLiveDataset } from './lib/useData';
 import { IBox, IChart, IHome, IPlus, ITag, ICart, IReceipt } from './ui/icons';
@@ -22,6 +22,9 @@ import { Import } from './screens/Import';
 import { NotificationsScreen } from './screens/Notifications';
 import { ForecastScreen } from './screens/Forecast';
 import { Fiscal } from './screens/Fiscal';
+import { SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
+import { syncNow } from './lib/vinted/sync';
+import { useUI } from './ui/kit';
 
 export function App() {
   const ds = useLiveDataset();
@@ -40,6 +43,7 @@ export function App() {
 function Shell() {
   const [r0, r1] = useRoute();
   const [addOpen, setAddOpen] = useState(false);
+  useAutoSync();
 
   let screen;
   switch (r0) {
@@ -61,6 +65,8 @@ function Shell() {
     case 'notifications': screen = <NotificationsScreen />; break;
     case 'previsions': screen = <ForecastScreen />; break;
     case 'fiscal': screen = <Fiscal />; break;
+    case 'synchro': screen = <VintedSyncScreen />; break;
+    case 'a-valider': screen = <SyncInbox />; break;
     default: screen = <Home />;
   }
 
@@ -129,4 +135,29 @@ function useSplash(ready: boolean) {
       window.clearTimeout(t2);
     };
   }, [ready]);
+}
+
+/** Synchro Gmail automatique : à l'ouverture et à chaque retour dans l'application (au plus toutes les 2 minutes). */
+function useAutoSync() {
+  const ui = useUI();
+  const toast = useRef(ui.toast);
+  toast.current = ui.toast;
+  useEffect(() => {
+    const tick = async () => {
+      if (document.visibilityState === 'hidden' || !navigator.onLine) return;
+      const { loadDataset } = await import('./lib/actions');
+      const s = (await loadDataset()).settings;
+      if (!s.syncUrl || !s.syncToken) return;
+      if (s.lastSyncAt && Date.now() - Date.parse(s.lastSyncAt) < 120_000) return;
+      try {
+        const r = await syncNow();
+        if (r.applied || r.inbox) toast.current(`Vinted : ${syncSummary(r)}`);
+      } catch {
+        /* silencieux : l'erreur s'affiche dans l'écran Synchro quand l'utilisateur lance la synchro */
+      }
+    };
+    tick();
+    document.addEventListener('visibilitychange', tick);
+    return () => document.removeEventListener('visibilitychange', tick);
+  }, []);
 }

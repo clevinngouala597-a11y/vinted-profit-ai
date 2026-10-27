@@ -5,6 +5,7 @@ import type {
   Expense,
   Goal,
   NotificationState,
+  SyncedEmail,
   InventoryMovement,
   Item,
   Purchase,
@@ -35,6 +36,7 @@ export class VPDatabase extends Dexie {
   auditLogs!: Table<AuditLog, string>;
   goals!: Table<Goal, string>;
   notifications!: Table<NotificationState, string>;
+  syncedEmails!: Table<SyncedEmail, string>;
 
   constructor(name = 'vinted-profit-ai') {
     super(name);
@@ -56,6 +58,8 @@ export class VPDatabase extends Dexie {
     this.version(2).stores({ goals: 'id' });
     // v3 : notifications masquées
     this.version(3).stores({ notifications: 'id' });
+    // v4 : e-mails Vinted synchronisés
+    this.version(4).stores({ syncedEmails: 'id, status, date' });
   }
 }
 
@@ -73,6 +77,7 @@ export const DATA_TABLES = [
   'auditLogs',
   'goals',
   'notifications',
+  'syncedEmails',
 ] as const;
 
 let current = new VPDatabase();

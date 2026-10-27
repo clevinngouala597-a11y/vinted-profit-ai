@@ -57,6 +57,10 @@ export function defaultSettings(today = todayISO()): Settings {
     versementLiberatoire: false,
     disabledNotifications: [],
     lastBackupAt: null,
+    syncUrl: '',
+    syncToken: '',
+    syncSince: null,
+    lastSyncAt: null,
   };
 }
 
@@ -115,7 +119,9 @@ export async function saveSettings(patch: Partial<Settings>) {
     if (patch[k] !== undefined) nonNeg(patch[k]!, 'Ce montant');
   const next = { ...cur, ...patch, id: 'main' as const };
   await db.settings.put(next);
-  await audit('settings', 'main', 'modification', JSON.stringify(patch));
+  // la clé secrète de synchronisation n'apparaît jamais dans le journal
+  const { syncToken: _hidden, ...visible } = patch;
+  await audit('settings', 'main', 'modification', JSON.stringify(_hidden !== undefined ? { ...visible, syncToken: '••••' } : visible));
   return next;
 }
 

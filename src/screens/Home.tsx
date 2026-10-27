@@ -1,4 +1,6 @@
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo, useState } from 'react';
+import { getDb } from '../lib/db';
 import {
   cashState,
   goalFor,
@@ -14,7 +16,7 @@ import { buckets, formatDate, formatRange, monthEnd, monthStart, previousRange }
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { RevenueProfitChart } from '../ui/charts';
-import { IBell, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
+import { IBell, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
 import { NotifRow, useNotifications } from './Notifications';
@@ -24,6 +26,7 @@ export function Home() {
   const p = usePeriod();
   const [menu, setMenu] = useState(false);
   const notifs = useNotifications();
+  const toValidate = useLiveQuery(() => getDb().syncedEmails.where('status').equals('inbox').count(), []) ?? 0;
 
   const entries = useMemo(() => plEntries(ds), [ds]);
   const m = periodMetrics(ds, p.range.from, p.range.to, entries);
@@ -58,6 +61,12 @@ export function Home() {
       </header>
 
       <PeriodPicker p={p} />
+
+      {toValidate > 0 && (
+        <button className="alert warn" style={{ width: '100%', border: 0, marginTop: 12, textAlign: 'left', cursor: 'pointer' }} onClick={() => go('a-valider')}>
+          <span><b>{toValidate} opération{toValidate > 1 ? 's' : ''} Vinted à valider</b> — indique l'article vendu pour que le bénéfice soit juste.</span>
+        </button>
+      )}
 
       <section className="hero" style={{ marginTop: 14 }} aria-label="Bénéfice de la période">
         <div className="hero-label">Bénéfice commercial <InfoButton k="profit" /></div>
@@ -130,6 +139,7 @@ export function Home() {
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />
+        <MenuLink icon={<IMail width={18} height={18} />} title="Synchro Vinted (Gmail)" sub={ds.settings.syncUrl ? 'Active : ventes et achats enregistrés seuls' : 'Enregistre tes ventes sans les saisir'} to="synchro" close={() => setMenu(false)} />
         <MenuLink icon={<ITarget width={18} height={18} />} title="Objectifs" sub="Bénéfice, ventes, budget, stock" to="objectifs" close={() => setMenu(false)} />
         <MenuLink icon={<ITrend width={18} height={18} />} title="Prévisions" sub="Trésorerie et résultat à 30, 60, 90 jours" to="previsions" close={() => setMenu(false)} />
         <MenuLink icon={<IScale width={18} height={18} />} title="Fiscalité" sub="Recettes, seuils, cotisations, livre des recettes" to="fiscal" close={() => setMenu(false)} />

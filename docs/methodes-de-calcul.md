@@ -126,3 +126,26 @@ Disponible pour acheter  = trésorerie confirmée − sorties en attente − ré
 - **Formats acceptés** :
   - dates : 31/12/2026, 31/12/26, 31.12.2026 ou 2026-12-31 ;
   - montants : « 12,50 », « 12.50 », « 1 234,56 € », « 1.234,56 » ou « 1,234.56 ».
+
+## Synchronisation des e-mails Vinted
+
+| E-mail Vinted | Effet dans l'application |
+|---|---|
+| « Ton article s'est vendu ! » | Vente à la date de l'e-mail. Le prix payé par l'acheteur pour l'article devient le montant encaissé. Paiement en attente. |
+| « La transaction est finalisée » | Paiement reçu à la date de l'e-mail, vente terminée. Si le montant viré diffère, la vente est corrigée, avec une trace au journal. |
+| « Commande mise à jour… acheminement » | Vente marquée expédiée. |
+| « Commande mise à jour… transaction annulée » | Vente annulée, article remis en vente (si le paiement n'a pas été reçu). |
+| « … : ta facture » (boost, vitrine) | Dépense « Frais de plateforme », fournisseur Vinted. |
+| « Ton reçu pour la commande » | Achat. Coût = montant payé : prix de l'article + frais de port, protection et réduction répartis en frais. |
+| « La commande … a été remboursée » | « À valider » : l'achat est à corriger à la main. |
+
+- **Association à un article** :
+  - même titre (accents, ponctuation et taille ignorés) ;
+  - ou au moins 75 % de mots en commun ;
+  - ou tous les mots du nom court (au moins 2) présents dans le titre Vinted.
+- **Articles identiques en stock** : le plus ancien part en premier.
+- **Prudence** :
+  - une vente déjà saisie à la main (même article, à 3 jours près) est reconnue et n'est pas recréée ;
+  - un e-mail n'est lu qu'une fois ;
+  - une seule synchro tourne à la fois ;
+  - les e-mails antérieurs à la date choisie ne sont pas importés.
