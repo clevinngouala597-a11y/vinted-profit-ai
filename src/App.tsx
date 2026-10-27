@@ -113,7 +113,7 @@ function TabLink({ to, label, icon, current }: { to: string; label: string; icon
 }
 
 /** Durée minimale d'affichage de l'écran de chargement : le temps que l'animation du logo se termine. */
-const SPLASH_MIN_MS = 1150;
+const SPLASH_MIN_MS = 2600;
 
 function useSplash(ready: boolean) {
   useEffect(() => {
@@ -123,7 +123,7 @@ function useSplash(ready: boolean) {
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const wait = reduced ? 0 : Math.max(0, SPLASH_MIN_MS - performance.now());
     const t1 = window.setTimeout(() => el.classList.add('sp-hide'), wait);
-    const t2 = window.setTimeout(() => el.remove(), wait + 400);
+    const t2 = window.setTimeout(() => el.remove(), wait + 650);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
