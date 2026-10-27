@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { go, useRoute } from './lib/router';
 import { DataContext, useLiveDataset } from './lib/useData';
 import { IBox, IChart, IHome, IPlus, ITag, ICart, IReceipt } from './ui/icons';
@@ -25,17 +25,9 @@ import { Fiscal } from './screens/Fiscal';
 
 export function App() {
   const ds = useLiveDataset();
-  if (!ds) {
-    return (
-      <div className="app page" aria-busy="true">
-        <div className="skeleton" style={{ height: 36, width: '50%', marginBottom: 18 }} />
-        <div className="skeleton" style={{ height: 170, marginBottom: 12 }} />
-        <div className="grid2">
-          {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 80 }} />)}
-        </div>
-      </div>
-    );
-  }
+  useSplash(!!ds);
+  // tant que les données ne sont pas chargées, l'écran de chargement (index.html) reste affiché
+  if (!ds) return null;
   return (
     <DataContext.Provider value={ds}>
       <UIProvider>
@@ -118,4 +110,23 @@ function TabLink({ to, label, icon, current }: { to: string; label: string; icon
       {label}
     </a>
   );
+}
+
+/** Durée minimale d'affichage de l'écran de chargement : le temps que l'animation du logo se termine. */
+const SPLASH_MIN_MS = 1150;
+
+function useSplash(ready: boolean) {
+  useEffect(() => {
+    if (!ready) return;
+    const el = document.getElementById('splash');
+    if (!el) return;
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const wait = reduced ? 0 : Math.max(0, SPLASH_MIN_MS - performance.now());
+    const t1 = window.setTimeout(() => el.classList.add('sp-hide'), wait);
+    const t2 = window.setTimeout(() => el.remove(), wait + 400);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [ready]);
 }
