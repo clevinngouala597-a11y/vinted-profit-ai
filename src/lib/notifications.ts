@@ -47,7 +47,8 @@ export function computeNotifications(ds: Dataset, today: ISODate): Notif[] {
 
   // --- stock ancien
   const st = stockState(ds, today);
-  if (st.stale.length)
+  const showStock = ds.settings.showStock === true;
+  if (showStock && st.stale.length)
     add('stock', 'anciens', sig(st.stale.map((i) => i.id)), {
       level: 'warn',
       title: `${plural(st.stale.length, 'article', 'articles')} en stock depuis ${ds.settings.staleDays} jours ou plus`,
@@ -123,7 +124,7 @@ export function computeNotifications(ds: Dataset, today: ISODate): Notif[] {
   }
 
   // --- données manquantes
-  if (st.missingTarget)
+  if (showStock && st.missingTarget)
     add('donnees', 'prix', String(st.missingTarget), {
       level: 'info',
       title: `${plural(st.missingTarget, 'article', 'articles')} sans prix de vente souhaité`,

@@ -7,12 +7,19 @@ import { computeNotifications, visibleNotifications } from '../src/lib/notificat
 let n = 0;
 beforeEach(async () => {
   setDb(new VPDatabase(`notif-${++n}`));
-  await saveSettings({ ...defaultSettings('2026-09-01'), onboarded: true, initialCash: 5000, staleDays: 30 });
+  await saveSettings({ ...defaultSettings('2026-09-01'), onboarded: true, initialCash: 5000, staleDays: 30, showStock: true });
 });
 const buy = (date: string, name = 'A', target: number | null = 1000) =>
   recordPurchase({ date, source: 'x', commonFees: 0, lotPrice: null, lines: [{ name, category: 'T-shirts', price: 300, targetPrice: target }] });
 
 describe('Notifications', () => {
+  it('stock masqué : aucune alerte de stock', async () => {
+    await recordPurchase({ date: '2026-09-01', source: 'Friperie', commonFees: 0, lotPrice: null, lines: [{ name: 'Veste', category: 'Vestes et manteaux', price: 1000, targetPrice: null, status: 'en_vente' }] });
+    await saveSettings({ showStock: false });
+    const { computeNotifications } = await import('../src/lib/notifications');
+    expect(computeNotifications(await loadDataset(), '2026-10-27').some((n) => n.category === 'stock' || n.id.startsWith('donnees:prix'))).toBe(false);
+  });
+
   it('stock ancien : masquée, elle ne revient que si la situation change', async () => {
     await buy('2026-09-01', 'Vieux');
     let ds = await loadDataset();

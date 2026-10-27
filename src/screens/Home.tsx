@@ -27,6 +27,7 @@ export function Home() {
   const [menu, setMenu] = useState(false);
   const notifs = useNotifications();
   const missingCosts = ds.items.filter((i) => i.costPending).length;
+  const showStock = ds.settings.showStock === true;
   const toValidate = useLiveQuery(() => getDb().syncedEmails.where('status').equals('inbox').count(), []) ?? 0;
 
   const entries = useMemo(() => plEntries(ds), [ds]);
@@ -103,22 +104,30 @@ export function Home() {
         )}
       </section>
 
-      {nothing && (
+      {nothing && (showStock || !ds.settings.syncUrl) && (
         <div style={{ marginTop: 12 }}>
-          <Empty
-            title="Commence par ton premier achat"
-            text="Enregistre un article acheté : son coût sert ensuite à calculer ton bénéfice réel quand tu le vends."
-            action={<button className="btn btn-primary" onClick={() => go('achat')}>Enregistrer un achat</button>}
-          />
+          {showStock ? (
+            <Empty
+              title="Commence par ton premier achat"
+              text="Enregistre un article acheté : son coût sert ensuite à calculer ton bénéfice réel quand tu le vends."
+              action={<button className="btn btn-primary" onClick={() => go('achat')}>Enregistrer un achat</button>}
+            />
+          ) : (
+            <Empty
+              title="Connecte ton Gmail"
+              text="Tes ventes et achats Vinted s'enregistreront tout seuls à partir de tes e-mails Vinted."
+              action={<button className="btn btn-primary" onClick={() => go('synchro')}>Synchro Vinted</button>}
+            />
+          )}
         </div>
       )}
 
       <div className="grid2" style={{ marginTop: 12 }}>
         <Tile k="cash" label="Trésorerie" value={formatEuros(cash.balance)} note={cash.pendingIn ? `+ ${formatEuros(cash.pendingIn)} en attente` : 'confirmée'} onClick={() => go('tresorerie')} tone={cash.balance < 0 ? 'neg' : ''} />
-        <Tile k="stockValue" label="Valeur du stock" value={formatEuros(stock.costValue)} note="au coût d'achat" onClick={() => go('stock')} />
+        {showStock && <Tile k="stockValue" label="Valeur du stock" value={formatEuros(stock.costValue)} note="au coût d'achat" onClick={() => go('stock')} />}
         <Tile k="purchases" label="Achats" value={formatEuros(m.purchases)} note="sur la période" />
         <Tile k="expenses" label="Dépenses annexes" value={formatEuros(m.general + m.saleCosts)} note="sur la période" onClick={() => go('depenses')} />
-        <Tile k="stockCount" label="En stock" value={`${stock.count}`} note={stock.count > 1 ? 'articles' : 'article'} onClick={() => go('stock')} />
+        {showStock && <Tile k="stockCount" label="En stock" value={`${stock.count}`} note={stock.count > 1 ? 'articles' : 'article'} onClick={() => go('stock')} />}
         <Tile k="sold" label="Vendus" value={`${m.itemsSold}`} note="sur la période" onClick={() => go('ventes')} />
         <Tile k="avg" label="Bénéfice / article" value={m.avgProfitPerItem === null ? '—' : formatEuros(m.avgProfitPerItem)} tone={m.avgProfitPerItem !== null && m.avgProfitPerItem < 0 ? 'neg' : ''} note={`marge ${formatPercent(m.margin)}`} />
         <Tile k="roi" label="ROI" value={m.roi === null ? '—' : formatPercent(m.roi)} tone={m.roi !== null && m.roi < 0 ? 'neg' : ''} note={m.roi === null ? 'non applicable' : 'sur le coût vendu'} />

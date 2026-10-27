@@ -61,6 +61,7 @@ export function fromDraft(d: SettingsDraft): Partial<Settings> {
 
 export function SettingsFields({ d, set, onboarding }: { d: SettingsDraft; set: (d: SettingsDraft) => void; onboarding?: boolean }) {
   const up = <K extends keyof SettingsDraft>(k: K) => (v: SettingsDraft[K]) => set({ ...d, [k]: v });
+  const s = useData().settings;
   return (
     <>
       <Field label="Nom de l'activité (facultatif)"><input className="input" value={d.businessName} onChange={(e) => up('businessName')(e.target.value)} placeholder="Ma friperie" /></Field>
@@ -84,12 +85,18 @@ export function SettingsFields({ d, set, onboarding }: { d: SettingsDraft; set: 
             <span style={{ position: 'absolute', right: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--faint)' }}>%</span>
           </div>
         </Field>
-        <Field label="Alerte stock ancien">
-          <select className="input" value={d.staleDays} onChange={(e) => up('staleDays')(Number(e.target.value))}>
-            {[15, 30, 60, 90].map((n) => <option key={n} value={n}>après {n} jours</option>)}
-          </select>
-        </Field>
+        {s.showStock && (
+          <Field label="Alerte stock ancien">
+            <select className="input" value={d.staleDays} onChange={(e) => up('staleDays')(Number(e.target.value))}>
+              {[15, 30, 60, 90].map((n) => <option key={n} value={n}>après {n} jours</option>)}
+            </select>
+          </Field>
+        )}
       </div>
+      {!onboarding && <label className="check" style={{ marginTop: 12 }}>
+        <input type="checkbox" checked={s.showStock === true} onChange={(e) => saveSettings({ showStock: e.target.checked })} />
+        <span><b>Afficher le stock</b><br /><span className="small muted">Onglet Stock, saisie manuelle des achats et des ventes, alertes de stock. Inutile si la synchro Vinted fait tout.</span></span>
+      </label>}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { go, useRoute } from './lib/router';
-import { DataContext, useLiveDataset } from './lib/useData';
+import { DataContext, useData, useLiveDataset } from './lib/useData';
 import { SaleBanner } from './ui/SaleBanner';
 import { IBox, IChart, IHome, IPlus, ITag, ICart, IReceipt } from './ui/icons';
 import { Sheet, UIProvider } from './ui/kit';
@@ -72,7 +72,8 @@ function Shell() {
     default: screen = <Home />;
   }
 
-  const tab = r0 === 'stock' ? 'stock' : r0 === 'ventes' ? 'ventes' : r0 === 'bilan' ? 'bilan' : r0 === undefined ? 'home' : '';
+  const showStock = useData().settings.showStock === true;
+  const tab = r0 === 'depenses' ? 'depenses' : r0 === 'stock' ? 'stock' : r0 === 'ventes' ? 'ventes' : r0 === 'bilan' ? 'bilan' : r0 === undefined ? 'home' : '';
   const pick = (path: string) => {
     setAddOpen(false);
     go(path);
@@ -85,7 +86,7 @@ function Shell() {
       <nav className="tabbar" aria-label="Navigation principale">
         <div className="tabbar-inner">
           <TabLink to="" label="Accueil" current={tab === 'home'} icon={<IHome />} />
-          <TabLink to="stock" label="Stock" current={tab === 'stock'} icon={<IBox />} />
+          {showStock ? <TabLink to="stock" label="Stock" current={tab === 'stock'} icon={<IBox />} /> : <TabLink to="depenses" label="Dépenses" current={tab === 'depenses'} icon={<IReceipt />} />}
           <button className="tab-add" aria-label="Ajouter un achat, une vente ou une dépense" onClick={() => setAddOpen(true)}>
             <IPlus width={26} height={26} />
           </button>
@@ -94,15 +95,19 @@ function Shell() {
         </div>
       </nav>
       <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Ajouter">
-        <p className="muted small" style={{ marginTop: 0 }}>Chaque opération met à jour le stock, le bénéfice et la trésorerie.</p>
-        <button className="menu-item" onClick={() => pick('achat')}>
-          <span className="dot in"><ICart width={18} height={18} /></span>
-          <span><div className="mi-title">Un achat</div><div className="mi-sub">Un article ou un lot, avec ses frais</div></span>
-        </button>
-        <button className="menu-item" onClick={() => pick('vente')}>
-          <span className="dot in"><ITag width={18} height={18} /></span>
-          <span><div className="mi-title">Une vente</div><div className="mi-sub">Un ou plusieurs articles du stock</div></span>
-        </button>
+        <p className="muted small" style={{ marginTop: 0 }}>{showStock ? 'Chaque opération met à jour le stock, le bénéfice et la trésorerie.' : 'Tes ventes et achats Vinted s’enregistrent tout seuls avec la synchro.'}</p>
+        {showStock && (
+          <>
+            <button className="menu-item" onClick={() => pick('achat')}>
+              <span className="dot in"><ICart width={18} height={18} /></span>
+              <span><div className="mi-title">Un achat</div><div className="mi-sub">Un article ou un lot, avec ses frais</div></span>
+            </button>
+            <button className="menu-item" onClick={() => pick('vente')}>
+              <span className="dot in"><ITag width={18} height={18} /></span>
+              <span><div className="mi-title">Une vente</div><div className="mi-sub">Un ou plusieurs articles du stock</div></span>
+            </button>
+          </>
+        )}
         <button className="menu-item" onClick={() => pick('depense')}>
           <span className="dot out"><IReceipt width={18} height={18} /></span>
           <span><div className="mi-title">Une dépense</div><div className="mi-sub">Emballage, matériel, déplacement…</div></span>

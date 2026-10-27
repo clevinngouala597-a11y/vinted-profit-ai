@@ -40,6 +40,8 @@ export interface Settings {
   saleAlert: boolean;
   /** Synchro : tout enregistrer sans passer par « À valider » (articles inconnus créés avec un coût à compléter). */
   autoRecord: boolean;
+  /** Afficher la gestion du stock (onglet, tuiles, alertes). Masquée par défaut : la synchro s'en occupe. */
+  showStock: boolean;
 }
 
 export const DEFAULT_CATEGORIES = [
