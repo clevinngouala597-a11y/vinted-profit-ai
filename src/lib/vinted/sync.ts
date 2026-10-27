@@ -47,6 +47,8 @@ export interface ScriptReply {
   /** version du script (1 si absente : première version) */
   version: number;
   notifications: boolean;
+  /** sujet ntfy écrit dans le script (il fait foi) */
+  topic: string | null;
 }
 
 export async function fetchVintedEmails(url: string, token: string, since: ISODate, fetcher: typeof fetch = fetch): Promise<ScriptReply> {
@@ -59,7 +61,7 @@ export async function fetchVintedEmails(url: string, token: string, since: ISODa
     throw new SyncError('Impossible de joindre le script Google. Vérifie ta connexion internet.');
   }
   if (!res.ok) throw new SyncError(`Le script Google a répondu avec une erreur (${res.status}). Vérifie qu'il est déployé en « Application Web » accessible à « Tout le monde ».`);
-  let body: { error?: string; messages?: RawEmail[]; version?: number; notifications?: boolean };
+  let body: { error?: string; messages?: RawEmail[]; version?: number; notifications?: boolean; sujet?: string };
   try {
     body = await res.json();
   } catch {
@@ -68,7 +70,8 @@ export async function fetchVintedEmails(url: string, token: string, since: ISODa
   if (body.error === 'unauthorized') throw new SyncError('Clé secrète refusée : le script et l’application n’ont pas la même clé.');
   if (body.error) throw new SyncError(`Erreur du script Google : ${body.error}`);
   if (!Array.isArray(body.messages)) throw new SyncError('Réponse inattendue du script Google.');
-  return { messages: body.messages, version: body.version ?? 1, notifications: body.notifications === true };
+  const topic = typeof body.sujet === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(body.sujet) ? body.sujet : null;
+  return { messages: body.messages, version: body.version ?? 1, notifications: body.notifications === true, topic };
 }
 
 // ---------------------------------------------------------------------------
@@ -512,8 +515,8 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
   const since = ds.settings.syncSince ?? ds.settings.trackingStart;
   const reply = await fetchVintedEmails(syncUrl, syncToken, since, fetcher);
   const emails = reply.messages;
-  if (reply.version !== ds.settings.scriptVersion || reply.notifications !== ds.settings.scriptNotifications)
-    await saveSettings({ scriptVersion: reply.version, scriptNotifications: reply.notifications });
+  if (reply.version !== ds.settings.scriptVersion || reply.notifications !== ds.settings.scriptNotifications || (reply.topic && reply.topic !== ds.settings.ntfyTopic))
+    await saveSettings({ scriptVersion: reply.version, scriptNotifications: reply.notifications, ...(reply.topic ? { ntfyTopic: reply.topic } : {}) });
   const db = getDb();
   const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
   const added = await ingestEmails(emails.filter((e) => e.date.slice(0, 10) >= since));

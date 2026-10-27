@@ -99,6 +99,7 @@ describe('Script Google version 2 (exécuté pour de vrai)', () => {
     expect(r.applied).toBe(1);
     let s = (await loadDataset()).settings;
     expect([s.scriptVersion, s.scriptNotifications]).toEqual([2, false]);
+    expect(s.ntfyTopic).toBe('cng-vinted-sujet'); // le sujet du script fait foi
 
     expect(await autoBackupIfDue(g.fetcher)).toBe(true);
     expect(await autoBackupIfDue(g.fetcher)).toBe(false); // déjà faite il y a moins de 12 h

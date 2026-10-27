@@ -47,7 +47,7 @@ function doGet(e) {
       messages.push({ id: m.getId(), date: m.getDate().toISOString(), subject: m.getSubject(), text: nettoyer(m.getPlainBody()) });
     });
   });
-  return reponse({ version: VERSION, messages: messages, notifications: notificationsActives() });
+  return reponse({ version: VERSION, messages: messages, notifications: notificationsActives(), sujet: SUJET });
 }
 
 // Sauvegarde envoyée par l'application : un fichier par jour, les 30 derniers sont gardés.
