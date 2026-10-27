@@ -1,7 +1,7 @@
 # CNG Vinted
 
-
 _Nom de projet : Vinted Profit AI. Nom affiché sur l'iPhone : **CNG Vinted**._
+
 Application mobile (PWA installable sur iPhone) de comptabilité, de stock et de rentabilité pour l'achat-revente sur Vinted.
 
 **Version 0.4 — Phases 1, 2 et 4 fonctionnelles** (la phase 3, l'assistant IA, attend une clé API). Les données réelles sont enregistrées sur l'appareil et persistent après fermeture.
