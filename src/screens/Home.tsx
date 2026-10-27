@@ -8,15 +8,14 @@ import {
   plEntries,
   reinvestment,
   saleBreakdown,
-  series,
   stockState,
 } from '../lib/engine';
 import { formatEuros, formatPercent, percent } from '../lib/money';
-import { buckets, formatDate, formatRange, monthEnd, monthStart, previousRange } from '../lib/period';
+import { formatDate, formatRange, monthEnd, monthStart, previousRange } from '../lib/period';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { labelList, labelsToPrint } from '../lib/vinted/labels';
-import { RevenueProfitChart } from '../ui/charts';
+import { TrendChart } from '../ui/TrendChart';
 import { IChart as IChartBar, ITag, IBell, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
@@ -41,7 +40,6 @@ export function Home() {
   const stock = stockState(ds, p.today);
   const month = periodMetrics(ds, monthStart(p.today), monthEnd(p.today), entries);
   const re = reinvestment(ds, cash, month.commercialProfit);
-  const chart = series(entries, buckets(p.range, p.today));
   const hasPrev = prev.revenue !== 0 || prev.commercialProfit !== 0;
   const goal = goalFor(ds, p.today.slice(0, 7)).profit;
 
@@ -144,7 +142,7 @@ export function Home() {
       </div>
 
       <h2>Évolution</h2>
-      <div className="card"><RevenueProfitChart data={chart} /></div>
+      <div className="card"><TrendChart entries={entries} range={p.range} prevRange={prevR} today={p.today} /></div>
 
       {notifs.visible.length > 0 && (
         <>
