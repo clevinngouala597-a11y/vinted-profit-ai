@@ -10,12 +10,12 @@ import { SyncError } from './sync';
 /** Fréquence des sauvegardes automatiques. */
 export const AUTO_BACKUP_HOURS = 12;
 
-async function callScript(action: string, init: RequestInit, fetcher: typeof fetch) {
+export async function callScript(action: string, init: RequestInit, fetcher: typeof fetch, extra = '') {
   const { syncUrl, syncToken } = (await loadDataset()).settings;
   if (!syncUrl || !syncToken) throw new SyncError("Connecte d'abord ton Gmail (Synchro Vinted).");
   let res: Response;
   try {
-    res = await fetcher(`${syncUrl}?token=${encodeURIComponent(syncToken)}&action=${action}`, { redirect: 'follow', ...init });
+    res = await fetcher(`${syncUrl}?token=${encodeURIComponent(syncToken)}&action=${action}${extra}`, { redirect: 'follow', ...init });
   } catch {
     throw new SyncError('Impossible de joindre ton script Google. Vérifie ta connexion internet.');
   }

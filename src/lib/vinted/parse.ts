@@ -27,7 +27,9 @@ export type VintedEvent =
   | (Base & { kind: 'cancelled'; title: string })
   | (Base & { kind: 'invoice'; label: string; amount: Cents })
   | (Base & { kind: 'purchase'; title: string; total: Cents; article: Cents | null; seller: string | null })
-  | (Base & { kind: 'purchase_refund'; title: string });
+  | (Base & { kind: 'purchase_refund'; title: string })
+  /** Bordereau d'envoi reçu en pièce jointe : à imprimer avant `deadline` (heure de Paris, « AAAA-MM-JJTHH:MM »). */
+  | (Base & { kind: 'label'; title: string; deadline: string | null; carrier: string | null; tracking: string | null });
 
 export const EVENT_LABEL: Record<VintedEvent['kind'], string> = {
   sale: 'Vente',
@@ -37,7 +39,10 @@ export const EVENT_LABEL: Record<VintedEvent['kind'], string> = {
   invoice: 'Facture Vinted',
   purchase: 'Achat sur Vinted',
   purchase_refund: 'Achat remboursé',
+  label: "Bordereau d'envoi",
 };
+
+const CARRIERS = ['Mondial Relay', 'Chronopost', 'Shop2Shop', 'Colissimo', 'Relais Colis', 'Vinted Go', 'UPS', 'DPD', 'InPost', 'La Poste'];
 
 const ENTITIES: Record<string, string> = { '&#39;': "'", '&quot;': '"', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ' };
 
@@ -75,6 +80,17 @@ export function parseVintedEmail(e: RawEmail): VintedEvent | null {
   const subject = normalizeText(e.subject);
   const text = normalizeText(e.text);
   const base = { msgId: e.id, date: localDate(e.date) };
+
+  // Bordereau : « Bordereau d'envoi Vinted - à utiliser avant le 19/10/2026 10 h 00 pour Veste … - Taille L »
+  if (/^bordereau d'envoi/i.test(subject)) {
+    const m = subject.match(/avant le (\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2})\s*h\s*(\d{2})\s+pour\s+(.+)$/i);
+    const title = m ? m[6] : (text.match(/Article\s*:\s*(.+?)\s+Format du colis/i) || [])[1];
+    if (!title) return null;
+    const deadline = m ? `${m[3]}-${m[2]}-${m[1]}T${m[4].padStart(2, '0')}:${m[5]}` : null;
+    const tracking = (text.match(/N° de suivi\s*:\s*([A-Z0-9]+)/i) || [])[1] ?? null;
+    const carrier = CARRIERS.find((c) => text.toLowerCase().includes(c.toLowerCase())) ?? null;
+    return { ...base, kind: 'label', title: cleanTitle(title), deadline, carrier, tracking };
+  }
 
   // Vente : « mickelyn a acheté Robe longue … - Taille S 80,00 € »
   if (/s'est vendu/i.test(subject)) {

@@ -23,6 +23,7 @@ import { Import } from './screens/Import';
 import { NotificationsScreen } from './screens/Notifications';
 import { ForecastScreen } from './screens/Forecast';
 import { Fiscal } from './screens/Fiscal';
+import { Labels } from './screens/Labels';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
 import { useUI } from './ui/kit';
@@ -69,6 +70,7 @@ function Shell() {
     case 'synchro': screen = <VintedSyncScreen />; break;
     case 'a-valider': screen = <SyncInbox />; break;
     case 'couts': screen = <MissingCosts />; break;
+    case 'bordereaux': screen = <Labels />; break;
     default: screen = <Home />;
   }
 

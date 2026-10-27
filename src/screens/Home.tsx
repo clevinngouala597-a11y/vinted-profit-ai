@@ -15,6 +15,7 @@ import { formatEuros, formatPercent, percent } from '../lib/money';
 import { buckets, formatDate, formatRange, monthEnd, monthStart, previousRange } from '../lib/period';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
+import { labelList, labelsToPrint } from '../lib/vinted/labels';
 import { RevenueProfitChart } from '../ui/charts';
 import { IBell, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
@@ -29,6 +30,8 @@ export function Home() {
   const missingCosts = ds.items.filter((i) => i.costPending).length;
   const showStock = ds.settings.showStock === true;
   const toValidate = useLiveQuery(() => getDb().syncedEmails.where('status').equals('inbox').count(), []) ?? 0;
+  const labelRows = useLiveQuery(() => getDb().syncedEmails.where('date').aboveOrEqual(new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)).toArray(), []);
+  const toPrint = useMemo(() => (labelRows ? labelsToPrint(labelList(labelRows, ds.settings.printedLabels ?? [])) : []), [labelRows, ds.settings.printedLabels]);
 
   const entries = useMemo(() => plEntries(ds), [ds]);
   const m = periodMetrics(ds, p.range.from, p.range.to, entries);
@@ -64,6 +67,11 @@ export function Home() {
 
       <PeriodPicker p={p} />
 
+      {toPrint.length > 0 && (
+        <button className="alert warn" style={{ width: '100%', border: 0, marginTop: 12, textAlign: 'left', cursor: 'pointer' }} onClick={() => go('bordereaux')}>
+          <span><b>🖨️ {toPrint.length} bordereau{toPrint.length > 1 ? 'x' : ''} à imprimer</b>{toPrint[0].urgency === 'urgent' ? ' — un est à envoyer dans moins de 24 h' : ''}</span>
+        </button>
+      )}
       {missingCosts > 0 && (
         <button className="alert warn" style={{ width: '100%', border: 0, marginTop: 12, textAlign: 'left', cursor: 'pointer' }} onClick={() => go('couts')}>
           <span><b>{missingCosts} article{missingCosts > 1 ? 's' : ''} sans prix d'achat</b> — ajoute-le{missingCosts > 1 ? 's' : ''} pour que le bénéfice soit juste.</span>
@@ -154,6 +162,7 @@ export function Home() {
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />
+        <MenuLink icon={<IReceipt width={18} height={18} />} title="Bordereaux à imprimer" sub="Tous tes bordereaux Vinted en un seul PDF" to="bordereaux" close={() => setMenu(false)} />
         <MenuLink icon={<IMail width={18} height={18} />} title="Synchro Vinted (Gmail)" sub={ds.settings.syncUrl ? 'Active : ventes et achats enregistrés seuls' : 'Enregistre tes ventes sans les saisir'} to="synchro" close={() => setMenu(false)} />
         <MenuLink icon={<ITarget width={18} height={18} />} title="Objectifs" sub="Bénéfice, ventes, budget, stock" to="objectifs" close={() => setMenu(false)} />
         <MenuLink icon={<ITrend width={18} height={18} />} title="Prévisions" sub="Trésorerie et résultat à 30, 60, 90 jours" to="previsions" close={() => setMenu(false)} />

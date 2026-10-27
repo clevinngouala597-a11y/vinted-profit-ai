@@ -6,7 +6,7 @@
  *  - il vérifie Gmail toutes les 5 minutes et envoie une notification à chaque vente, même appli fermée,
  *    via l'appli ntfy et un sujet secret (version 2).
  */
-export const SCRIPT_VERSION = 2;
+export const SCRIPT_VERSION = 3;
 
 export function newSecret(): string {
   const bytes = new Uint8Array(24);
@@ -30,12 +30,13 @@ const CLE = '${secret}';
 const SUJET = '${topic}';
 const VERSION = ${SCRIPT_VERSION};
 const DOSSIER = 'CNG Vinted - sauvegardes';
-const RECHERCHE = 'from:(vinted.fr OR vinted.com) subject:(vendu OR finalisée OR "mise à jour" OR facture OR reçu OR remboursée)';
+const RECHERCHE = 'from:(vinted.fr OR vinted.com) subject:(vendu OR finalisée OR "mise à jour" OR facture OR reçu OR remboursée OR bordereau)';
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.token !== CLE) return reponse({ error: 'unauthorized' });
   if (p.action === 'restaurer') return reponse(derniereSauvegarde());
+  if (p.action === 'bordereaux') return reponse({ version: VERSION, bordereaux: bordereaux(String(p.ids || '').split(',').slice(0, 30)) });
   if (p.action === 'test') {
     notifier('Test CNG Vinted', 'Les notifications fonctionnent : tu seras prévenu à chaque vente.', ['white_check_mark']);
     return reponse({ version: VERSION, ok: true, notifications: notificationsActives() });
@@ -81,6 +82,21 @@ function listeSauvegardes(dossier) {
     if (/^cng-vinted-\\d{4}-\\d{2}-\\d{2}\\.json$/.test(f.getName())) out.push(f);
   }
   return out.sort(function (a, b) { return a.getName() < b.getName() ? 1 : -1; });
+}
+
+// PDF des bordereaux d'envoi Vinted demandés (lus seulement au moment d'imprimer).
+function bordereaux(ids) {
+  return ids.filter(function (id) { return /^[0-9a-f]{8,24}$/.test(id); }).map(function (id) {
+    try {
+      const m = GmailApp.getMessageById(id);
+      if (!/vinted/i.test(m.getFrom()) || !/bordereau/i.test(m.getSubject())) return { id: id, error: 'pas un bordereau Vinted' };
+      const pdf = m.getAttachments().filter(function (a) { return /pdf/i.test(a.getContentType()) || /\.pdf$/i.test(a.getName()); })[0];
+      if (!pdf) return { id: id, error: 'pas de PDF (QR code ?)' };
+      return { id: id, nom: pdf.getName(), pdf: Utilities.base64Encode(pdf.getBytes()) };
+    } catch (err) {
+      return { id: id, error: String(err) };
+    }
+  });
 }
 
 function dossierSauvegardes() {

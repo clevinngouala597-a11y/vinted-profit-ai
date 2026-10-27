@@ -171,7 +171,7 @@ async function autoItem(title: string, date: ISODate): Promise<string> {
 const VENTE_ECARTEE = 'Vente écartée : suite ignorée';
 
 const refunded = (ds: Dataset, saleId: string) => sum(ds.refunds.filter((r) => r.saleId === saleId).map((r) => r.amount));
-const INCREMENTAL_DAYS = 3;
+const INCREMENTAL_DAYS = 7;
 const maxDate = (a: ISODate, b: ISODate) => (a > b ? a : b);
 const addDays = (d: ISODate, n: number) => new Date(Date.parse(d) + n * 86_400_000).toISOString().slice(0, 10);
 const daysBetween = (a: ISODate, b: ISODate) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
@@ -225,7 +225,7 @@ export async function ingestEmails(emails: RawEmail[]): Promise<number> {
 
 type Outcome = { status: SyncedEmail['status']; ref?: string | null; note: string };
 
-const ORDER: Record<VintedEvent['kind'], number> = { purchase: 0, sale: 1, shipped: 2, cancelled: 3, completed: 4, invoice: 5, purchase_refund: 6 };
+const ORDER: Record<VintedEvent['kind'], number> = { purchase: 0, sale: 1, label: 2, shipped: 3, cancelled: 4, completed: 5, invoice: 6, purchase_refund: 7 };
 
 /** Applique tout ce qui peut l'être. Renvoie le résumé de ce qui a été fait. */
 export async function processPending(today: ISODate = new Date().toISOString().slice(0, 10)) {
@@ -401,6 +401,9 @@ async function applyEvent(row: SyncedEmail, ev: VintedEvent, today: ISODate, aut
 
     case 'purchase_refund':
       return { status: 'inbox', note: 'Un achat Vinted a été remboursé : corrige ou retire l’article correspondant.' };
+
+    case 'label':
+      return { status: 'applied', note: `Bordereau ${ev.carrier ?? ''} à imprimer`.replace('  ', ' ') };
   }
 }
 

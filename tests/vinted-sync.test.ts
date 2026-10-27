@@ -332,7 +332,7 @@ describe('Changer le statut d’une vente à la main', () => {
 });
 
 describe('Lectures Gmail économisées', () => {
-  it('première synchro complète, ensuite seulement les 3 derniers jours', async () => {
+  it('première synchro complète, ensuite seulement les 7 derniers jours', async () => {
     await saveSettings({ syncSince: '2026-07-01' });
     const afters: string[] = [];
     const spy = (async (url: string) => { afters.push(new URL(url).searchParams.get('after')!); return fakeScript(url); }) as unknown as typeof fetch;
@@ -341,7 +341,7 @@ describe('Lectures Gmail économisées', () => {
     await syncNow(spy, '2026-10-28');
     await saveSettings({ syncSince: '2026-09-01' }); // date changée : relecture complète
     await syncNow(spy, '2026-10-28');
-    expect(afters).toEqual(['2026/07/01', '2026/10/24', '2026/09/01']);
+    expect(afters).toEqual(['2026/07/01', '2026/10/20', '2026/09/01']);
   });
 });
 

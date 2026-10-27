@@ -69,6 +69,8 @@ export function defaultSettings(today = todayISO()): Settings {
     scriptNotifications: false,
     driveBackupAt: null,
     syncedFrom: null,
+    printedLabels: [],
+    labelFormat: 'etiquette',
   };
 }
 

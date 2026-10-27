@@ -51,6 +51,10 @@ export interface Settings {
   driveBackupAt: ISOTime | null;
   /** Date « à partir du » de la dernière lecture complète de Gmail (ensuite : lecture des derniers jours seulement). */
   syncedFrom: ISODate | null;
+  /** Bordereaux déjà imprimés (identifiants Gmail). */
+  printedLabels: string[];
+  /** Format d'impression des bordereaux. */
+  labelFormat: 'etiquette' | 'a4';
 }
 
 export const DEFAULT_CATEGORIES = [

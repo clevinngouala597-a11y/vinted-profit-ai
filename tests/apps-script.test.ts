@@ -6,10 +6,12 @@ import { defaultSettings, loadDataset, saveSettings } from '../src/lib/actions';
 import { appsScriptSource, newTopic } from '../src/lib/vinted/appsScript';
 import { autoBackupIfDue, driveBackup, driveRestore, sendTestNotification } from '../src/lib/vinted/drive';
 import { syncNow } from '../src/lib/vinted/sync';
+import { buildLabelsPdf } from '../src/lib/vinted/labels';
+import { PDFDocument } from 'pdf-lib';
 
 /** Faux environnement Google Apps Script : exécute le VRAI script généré par l'application. */
 function googleEnv(secret: string, topic: string) {
-  const mails: { id: string; date: Date; subject: string; body: string }[] = [];
+  const mails: { id: string; date: Date; subject: string; body: string; pdf?: number[] }[] = [];
   const sent: { topic: string; title: string; message: string; tags: string[] }[] = [];
   const props = new Map<string, string>();
   const triggers: string[] = [];
@@ -26,6 +28,11 @@ function googleEnv(secret: string, topic: string) {
   };
   const sandbox: Record<string, unknown> = {
     GmailApp: {
+      getMessageById: (id: string) => {
+        const m = mails.find((x) => x.id === id);
+        if (!m) throw new Error('introuvable');
+        return { getFrom: () => 'Vinted <no-reply@vinted.fr>', getSubject: () => m.subject, getAttachments: () => (m.pdf ? [{ getContentType: () => 'application/pdf', getName: () => 'Bordereau.pdf', getBytes: () => m.pdf }] : []) };
+      },
       search: (q: string) => mails
         .filter((m) => !/subject:\(vendu OR finalisée\)/.test(q) || /vendu|finalisée/.test(m.subject))
         .map((m) => ({ getMessages: () => [{ getId: () => m.id, getDate: () => m.date, getSubject: () => m.subject, getPlainBody: () => m.body }] })),
@@ -36,6 +43,7 @@ function googleEnv(secret: string, topic: string) {
       createFolder: (n: string) => { const f = { name: n, files: [] }; folders.push(f); return folderObj(f); },
     },
     Utilities: {
+      base64Encode: (b: number[]) => Buffer.from(b).toString('base64'),
       formatDate: () => '2026-10-27',
       newBlob: (content: string, _mime: string, name: string) => ({ content, name }),
     },
@@ -67,7 +75,7 @@ beforeEach(async () => {
   await saveSettings({ ...defaultSettings('2026-10-01'), onboarded: true, syncUrl: 'https://script.google.com/macros/s/abc/exec', syncToken: SECRET, syncSince: '2026-10-01', autoRecord: true });
 });
 
-describe('Script Google version 2 (exécuté pour de vrai)', () => {
+describe('Script Google (exécuté pour de vrai)', () => {
   it('notifications : installer puis une notification par nouvelle vente et par paiement, jamais deux fois', () => {
     const topic = newTopic();
     expect(topic).toMatch(/^cng-vinted-[A-Za-z0-9_-]{20}$/);
@@ -98,7 +106,7 @@ describe('Script Google version 2 (exécuté pour de vrai)', () => {
     const r = await syncNow(g.fetcher, '2026-10-27');
     expect(r.applied).toBe(1);
     let s = (await loadDataset()).settings;
-    expect([s.scriptVersion, s.scriptNotifications]).toEqual([2, false]);
+    expect([s.scriptVersion, s.scriptNotifications]).toEqual([3, false]);
     expect(s.ntfyTopic).toBe('cng-vinted-sujet'); // le sujet du script fait foi
 
     expect(await autoBackupIfDue(g.fetcher)).toBe(true);
@@ -130,5 +138,19 @@ describe('Script Google version 2 (exécuté pour de vrai)', () => {
     expect(await sendTestNotification(g.fetcher)).toBe(true);
     expect(g.sent[0]).toMatchObject({ topic: 'cng-vinted-sujet', title: 'Test CNG Vinted' });
     expect((await loadDataset()).settings.scriptNotifications).toBe(true);
+  });
+
+  it('bordereaux : la synchro les liste, le script envoie les PDF, un seul PDF A4 en sort', async () => {
+    const g = googleEnv(SECRET, 'cng-vinted-sujet');
+    const one = async () => { const d = await PDFDocument.create(); d.addPage([595.28, 841.89]); return Array.from(await d.save()); };
+    g.mails.push({ id: 'aaaa0001aaaa0001', date: new Date('2026-10-26T10:00:00Z'), subject: "Bordereau d'envoi Vinted - à utiliser avant le 02/11/2026 10 h 00 pour Robe - Taille S", body: 'Article : Robe - Taille S Format du colis : 500 g N° de suivi : 123 Mondial Relay', pdf: await one() });
+    g.mails.push({ id: 'aaaa0002aaaa0002', date: new Date('2026-10-26T11:00:00Z'), subject: "Bordereau d'envoi Vinted - à utiliser avant le 03/11/2026 10 h 00 pour Veste - Taille L", body: 'Article : Veste - Taille L Format du colis : 1 kg Vinted Go' });
+    await syncNow(g.fetcher, '2026-10-27');
+    const rows = (await import('../src/lib/db')).getDb().syncedEmails;
+    expect((await rows.toArray()).filter((r) => r.kind === 'label').map((r) => r.title).sort()).toEqual(['Robe - Taille S', 'Veste - Taille L']);
+    const r = await buildLabelsPdf(['aaaa0001aaaa0001', 'aaaa0002aaaa0002'], 'a4', g.fetcher);
+    expect(r.printedIds).toEqual(['aaaa0001aaaa0001']);
+    expect(r.missing).toEqual(['aaaa0002aaaa0002']); // QR code, pas de PDF
+    expect((await PDFDocument.load(new Uint8Array(await r.blob.arrayBuffer()))).getPageCount()).toBe(1);
   });
 });
