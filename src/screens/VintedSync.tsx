@@ -1,13 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
-import { completeItemCost, saveSettings } from '../lib/actions';
+import { completeItemCost, saveSettings, setCustomSound } from '../lib/actions';
 import { getDb } from '../lib/db';
 import { formatEuros, parseEuros } from '../lib/money';
 import { formatDate, todayISO } from '../lib/period';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { DEFAULT_CATEGORIES, SELLABLE, type SyncedEmail } from '../lib/types';
-import { announceSales } from '../lib/saleAlert';
+import { announceSales, previewSound, SOUNDS, type SoundId } from '../lib/saleAlert';
 import { appsScriptSource, newSecret, newTopic, SCRIPT_VERSION } from '../lib/vinted/appsScript';
 import { driveBackup, driveRestore, sendTestNotification } from '../lib/vinted/drive';
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
@@ -110,8 +110,9 @@ export function VintedSyncScreen() {
             </label>
             <label className="check" style={{ marginBottom: 10 }}>
               <input type="checkbox" checked={s.saleAlert !== false} onChange={(e) => saveSettings({ saleAlert: e.target.checked })} />
-              <span><b>Bannière et son « ka-ching » à chaque vente</b><br /><span className="small muted">Dès qu'une nouvelle vente arrive à l'ouverture de l'appli. Le son suit le mode silencieux de ton iPhone.</span></span>
+              <span><b>Bannière et son à chaque vente</b><br /><span className="small muted">Dès qu'une nouvelle vente arrive à l'ouverture de l'appli. Le son suit le mode silencieux de ton iPhone.</span></span>
             </label>
+            {s.saleAlert !== false && <SoundPicker />}
             <button className="btn btn-ghost btn-sm" onClick={() => announceSales([{ id: 'test', title: 'Exemple : Robe longue rose à fleurs - Taille S', amount: 8000, recorded: true }])}>
               Tester la notification
             </button>
@@ -504,6 +505,39 @@ function InboxCard({ row, closure, unpaid }: { row: SyncedEmail; closure: Synced
           <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => run(async () => { await dismissSynced(row.id); ui.toast('Marqué comme traité'); })}>C'est traité</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Choix du son de vente : sons créés pour l'appli, ou ton propre fichier. */
+function SoundPicker() {
+  const s = useData().settings;
+  const { error, run } = useAction();
+  const ui = useUI();
+  const cur = (s.saleSound || 'kaching') as SoundId;
+  const pick = (id: SoundId) => run(async () => {
+    if (id === 'perso' && !s.customSoundId) return;
+    await saveSettings({ saleSound: id });
+    previewSound(id);
+  });
+  return (
+    <div style={{ margin: '0 0 12px 32px' }}>
+      <div className="small muted" style={{ marginBottom: 6 }}>Son de vente (touche pour écouter)</div>
+      <div className="chips" style={{ flexWrap: 'wrap', overflow: 'visible' }}>
+        {SOUNDS.filter((o) => o.id !== 'perso' || s.customSoundId).map((o) => (
+          <button key={o.id} className="chip" aria-pressed={cur === o.id} onClick={() => pick(o.id)}>▶ {o.label}</button>
+        ))}
+      </div>
+      <label className="btn btn-ghost btn-sm" style={{ marginTop: 8 }}>
+        🎵 {s.customSoundId ? 'Changer mon son' : 'Importer mon son'}
+        <input type="file" accept="audio/*,.mp3,.m4a,.wav,.aac" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          if (f) run(async () => { await setCustomSound(f); ui.toast('Ton son est enregistré'); setTimeout(() => previewSound('perso'), 300); });
+        }} />
+      </label>
+      <p className="tiny faint" style={{ margin: '6px 0 0' }}>MP3, M4A ou WAV de quelques secondes (2 Mo max), par exemple un son enregistré avec ton téléphone. Les notifications appli fermée (ntfy) gardent le son de l'iPhone.</p>
+      <ErrorBox error={error} />
     </div>
   );
 }

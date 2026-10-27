@@ -35,6 +35,54 @@ export function onSales(cb: (sales: SaleAlert[]) => void): () => void {
 let ctx: AudioContext | null = null;
 let pendingUntil = 0;
 
+export const SOUNDS = [
+  { id: 'kaching', label: 'Ka-ching (caisse)' },
+  { id: 'pieces', label: 'Pluie de pièces' },
+  { id: 'succes', label: 'Succès' },
+  { id: 'arcade', label: 'Level up (arcade)' },
+  { id: 'cloche', label: 'Clochette douce' },
+  { id: 'perso', label: 'Mon son (fichier importé)' },
+] as const;
+export type SoundId = (typeof SOUNDS)[number]['id'];
+
+let choice: SoundId = 'kaching';
+let custom: { blob: Blob; buffer: AudioBuffer | null } | null = null;
+
+/** Son choisi par l'utilisateur (et son fichier importé, s'il y en a un). */
+export function configureSound(id: SoundId, file: Blob | null) {
+  choice = id;
+  if (!file) custom = null;
+  else if (custom?.blob !== file) custom = { blob: file, buffer: null };
+}
+
+async function playCustom(c: AudioContext) {
+  if (!custom) return render(c);
+  try {
+    if (!custom.buffer) custom.buffer = await c.decodeAudioData(await custom.blob.arrayBuffer());
+    const src = c.createBufferSource();
+    src.buffer = custom.buffer;
+    const g = c.createGain();
+    g.gain.value = 0.9;
+    src.connect(g).connect(c.destination);
+    src.start();
+    src.stop(c.currentTime + Math.min(custom.buffer.duration, 8));
+  } catch {
+    render(c); // fichier illisible : son par défaut
+  }
+}
+
+function playNow(c: AudioContext, id: SoundId = choice) {
+  if (id === 'perso') return void playCustom(c);
+  SYNTHS[id](c, c.currentTime + 0.02);
+}
+
+/** Joue un son précis tout de suite (aperçu dans les réglages, après un toucher). */
+export function previewSound(id: SoundId) {
+  const c = audio();
+  if (!c) return;
+  c.resume().then(() => playNow(c, id)).catch(() => {});
+}
+
 function audio(): AudioContext | null {
   if (ctx) return ctx;
   const C = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -51,7 +99,7 @@ export function installAudioUnlock() {
     c.resume().then(() => {
       if (Date.now() < pendingUntil) {
         pendingUntil = 0;
-        render(c);
+        playNow(c);
       }
     }).catch(() => {});
   };
@@ -64,12 +112,12 @@ export function installAudioUnlock() {
 export function playSaleSound() {
   const c = audio();
   if (!c) return;
-  if (c.state === 'running') return render(c);
+  if (c.state === 'running') return playNow(c);
   pendingUntil = Date.now() + 30_000;
   c.resume().then(() => {
     if (c.state === 'running' && pendingUntil) {
       pendingUntil = 0;
-      render(c);
+      playNow(c);
     }
   }).catch(() => {});
 }
@@ -136,3 +184,74 @@ export function render(c: BaseAudioContext, at = c.currentTime + 0.02) {
   bell(at + 0.13, 1568, 0.9); // sol
   bell(at + 0.21, 2093, 1); // do, plus aigu : « ching ! »
 }
+
+// ---------------------------------------------------------------------------
+// Autres sons synthétisés (aucun fichier audio embarqué)
+// ---------------------------------------------------------------------------
+
+function out(c: BaseAudioContext, level = 0.5) {
+  const g = c.createGain();
+  g.gain.value = level;
+  const comp = c.createDynamicsCompressor();
+  g.connect(comp).connect(c.destination);
+  return g;
+}
+
+function tone(c: BaseAudioContext, dest: AudioNode, t: number, f: number, dur: number, type: OscillatorType = 'sine', level = 0.4, glideTo?: number) {
+  const o = c.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(f, t);
+  if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur * 0.6);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(level, t + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(dest);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+}
+
+/** Pluie de pièces : une dizaine de « tintements » métalliques qui tombent. */
+function pieces(c: BaseAudioContext, at: number) {
+  const m = out(c, 0.9);
+  let t = at;
+  for (let i = 0; i < 11; i++) {
+    const f = 2400 + ((i * 937) % 1600);
+    tone(c, m, t, f, 0.18, 'triangle', 0.35);
+    tone(c, m, t, f * 1.51, 0.12, 'sine', 0.18);
+    t += 0.045 + ((i * 17) % 5) * 0.012;
+  }
+  tone(c, m, t + 0.05, 3136, 0.9, 'sine', 0.3);
+}
+
+/** Succès : petit arpège montant brillant. */
+function succes(c: BaseAudioContext, at: number) {
+  const m = out(c, 0.85);
+  [1047, 1319, 1568, 2093].forEach((f, i) => {
+    tone(c, m, at + i * 0.09, f, 0.5 + i * 0.1, 'sine', 0.4);
+    tone(c, m, at + i * 0.09, f * 2, 0.25, 'sine', 0.08);
+  });
+}
+
+/** Level up façon jeu vidéo 8 bits. */
+function arcade(c: BaseAudioContext, at: number) {
+  const m = out(c, 0.6);
+  [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(c, m, at + i * 0.07, f, 0.09, 'square', 0.35));
+  tone(c, m, at + 0.5, 1568, 0.45, 'square', 0.3);
+}
+
+/** Clochette douce, discrète. */
+function cloche(c: BaseAudioContext, at: number) {
+  const m = out(c, 1);
+  tone(c, m, at, 1760, 1.4, 'sine', 0.4);
+  tone(c, m, at, 1760 * 2.76, 0.6, 'sine', 0.08);
+  tone(c, m, at + 0.16, 2637, 1.2, 'sine', 0.3);
+}
+
+export const SYNTHS: Record<Exclude<SoundId, 'perso'>, (c: BaseAudioContext, at: number) => void> = {
+  kaching: (c, at) => render(c, at),
+  pieces,
+  succes,
+  arcade,
+  cloche,
+};

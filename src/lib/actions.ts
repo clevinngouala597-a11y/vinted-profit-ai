@@ -62,6 +62,8 @@ export function defaultSettings(today = todayISO()): Settings {
     syncSince: null,
     lastSyncAt: null,
     saleAlert: true,
+    saleSound: 'kaching',
+    customSoundId: null,
     autoRecord: true,
     showStock: false,
     ntfyTopic: '',
@@ -912,6 +914,17 @@ export async function savePhoto(blob: Blob): Promise<string> {
   const id = uid();
   await getDb().attachments.add({ id, blob, mime: blob.type, createdAt: now() });
   return id;
+}
+
+/** Remplace le son de vente importé (2 Mo max). */
+export async function setCustomSound(file: Blob) {
+  if (file.size > 2_000_000) fail('Fichier trop lourd : 2 Mo maximum (un son de quelques secondes suffit).');
+  if (file.type && !file.type.startsWith('audio/') && !file.type.startsWith('video/')) fail('Ce fichier n’est pas un son.');
+  const db = getDb();
+  const old = (await db.settings.get('main'))?.customSoundId;
+  const id = await savePhoto(file);
+  await saveSettings({ customSoundId: id, saleSound: 'perso' });
+  if (old) await db.attachments.delete(old);
 }
 
 export async function addItemPhotos(itemId: string, blobs: Blob[]) {

@@ -38,6 +38,10 @@ export interface Settings {
   lastSyncAt: ISOTime | null;
   /** Bannière et son de caisse à chaque nouvelle vente. */
   saleAlert: boolean;
+  /** Son joué à chaque vente (voir SOUNDS), « perso » = fichier importé. */
+  saleSound: string;
+  /** Fichier son importé (table des pièces jointes). */
+  customSoundId: string | null;
   /** Synchro : tout enregistrer sans passer par « À valider » (articles inconnus créés avec un coût à compléter). */
   autoRecord: boolean;
   /** Afficher la gestion du stock (onglet, tuiles, alertes). Masquée par défaut : la synchro s'en occupe. */

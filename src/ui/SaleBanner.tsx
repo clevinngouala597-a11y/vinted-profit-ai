@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatEuros } from '../lib/money';
 import { go } from '../lib/router';
-import { installAudioUnlock, onSales, playSaleSound, type SaleAlert } from '../lib/saleAlert';
+import { configureSound, installAudioUnlock, onSales, playSaleSound, type SaleAlert, type SoundId } from '../lib/saleAlert';
+import { getDb } from '../lib/db';
+import { useData } from '../lib/useData';
 
 const SHOW_MS = 7000;
 
@@ -10,6 +12,15 @@ export function SaleBanner() {
   const [sales, setSales] = useState<SaleAlert[] | null>(null);
   const [leaving, setLeaving] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  const { saleSound, customSoundId } = useData().settings;
+
+  useEffect(() => {
+    let live = true;
+    const id = (saleSound || 'kaching') as SoundId;
+    if (!customSoundId) configureSound(id, null);
+    else getDb().attachments.get(customSoundId).then((a) => live && configureSound(id, a?.blob ?? null)).catch(() => {});
+    return () => { live = false; };
+  }, [saleSound, customSoundId]);
 
   useEffect(() => {
     installAudioUnlock();
