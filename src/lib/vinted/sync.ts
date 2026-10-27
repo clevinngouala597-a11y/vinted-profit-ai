@@ -27,6 +27,7 @@ import {
 import { getDb } from '../db';
 import { sum, type Cents } from '../money';
 import { SELLABLE, type Dataset, type ISODate, type Item, type Sale, type SyncedEmail } from '../types';
+import { announceSales } from '../saleAlert';
 import { normTitle, parseVintedEmail, titleSimilarity, type RawEmail, type VintedEvent } from './parse';
 
 export const MATCH_THRESHOLD = 0.75;
@@ -146,6 +147,7 @@ export const NO_PAYMENT_DAYS = 21;
 const VENTE_ECARTEE = 'Vente écartée : suite ignorée';
 
 const refunded = (ds: Dataset, saleId: string) => sum(ds.refunds.filter((r) => r.saleId === saleId).map((r) => r.amount));
+const addDays = (d: ISODate, n: number) => new Date(Date.parse(d) + n * 86_400_000).toISOString().slice(0, 10);
 const daysBetween = (a: ISODate, b: ISODate) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
 
 /** Catégorie probable d'après le titre (modifiable ensuite). */
@@ -389,7 +391,12 @@ export interface SyncResult {
   applied: number;
   inbox: number;
   waiting: number;
+  /** ventes récentes (3 derniers jours) découvertes par cette synchro */
+  newSales: { id: string; title: string; amount: number | null; recorded: boolean }[];
 }
+
+/** Au-delà, une vente découverte (import de l'historique) ne déclenche pas d'alerte. */
+const ALERT_DAYS = 3;
 
 /** Une seule synchronisation à la fois : un second appel pendant qu'une synchro tourne reçoit le même résultat. */
 let inflight: Promise<SyncResult> | null = null;
@@ -405,9 +412,18 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
   if (!syncUrl || !syncToken) throw new SyncError('La synchronisation Gmail n’est pas encore configurée.');
   const since = ds.settings.syncSince ?? ds.settings.trackingStart;
   const emails = await fetchVintedEmails(syncUrl, syncToken, since, fetcher);
+  const db = getDb();
+  const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
   const added = await ingestEmails(emails.filter((e) => e.date.slice(0, 10) >= since));
   const s = await processPending(today);
   await saveSettings({ lastSyncAt: now() });
-  const inbox = await getDb().syncedEmails.where('status').equals('inbox').count();
-  return { read: emails.length, added, applied: s.applied, inbox, waiting: s.waiting };
+  const inbox = await db.syncedEmails.where('status').equals('inbox').count();
+  const fresh = (await db.syncedEmails.where('date').aboveOrEqual(addDays(today, -ALERT_DAYS)).toArray())
+    .filter((r) => r.kind === 'sale' && !known.has(r.id) && r.status !== 'ignored')
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const newSales = fresh.map((r) => ({
+    id: r.id, title: r.title, amount: (r.event as VintedEvent & { kind: 'sale' }).amount, recorded: r.status === 'applied',
+  }));
+  if (ds.settings.saleAlert !== false) announceSales(newSales);
+  return { read: emails.length, added, applied: s.applied, inbox, waiting: s.waiting, newSales };
 }

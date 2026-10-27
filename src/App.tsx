@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { go, useRoute } from './lib/router';
 import { DataContext, useLiveDataset } from './lib/useData';
+import { SaleBanner } from './ui/SaleBanner';
 import { IBox, IChart, IHome, IPlus, ITag, ICart, IReceipt } from './ui/icons';
 import { Sheet, UIProvider } from './ui/kit';
 import { Home } from './screens/Home';
@@ -78,6 +79,7 @@ function Shell() {
 
   return (
     <>
+      <SaleBanner />
       <main className="page" key={r0 + (r1 ?? '')}>{screen}</main>
       <nav className="tabbar" aria-label="Navigation principale">
         <div className="tabbar-inner">
@@ -151,7 +153,8 @@ function useAutoSync() {
       if (s.lastSyncAt && Date.now() - Date.parse(s.lastSyncAt) < 120_000) return;
       try {
         const r = await syncNow();
-        if (r.applied || r.inbox) toast.current(`Vinted : ${syncSummary(r)}`);
+        // les nouvelles ventes ont leur propre bannière (avec le son) ; le reste est résumé discrètement
+        if (!r.newSales.length && (r.applied || r.inbox)) toast.current(`Vinted : ${syncSummary(r)}`);
       } catch {
         /* silencieux : l'erreur s'affiche dans l'écran Synchro quand l'utilisateur lance la synchro */
       }

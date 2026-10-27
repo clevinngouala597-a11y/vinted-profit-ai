@@ -61,6 +61,7 @@ export function defaultSettings(today = todayISO()): Settings {
     syncToken: '',
     syncSince: null,
     lastSyncAt: null,
+    saleAlert: true,
   };
 }
 

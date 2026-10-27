@@ -7,6 +7,7 @@ import { formatDate, todayISO } from '../lib/period';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { DEFAULT_CATEGORIES, SELLABLE, type SyncedEmail } from '../lib/types';
+import { announceSales } from '../lib/saleAlert';
 import { appsScriptSource, newSecret } from '../lib/vinted/appsScript';
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
 import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales, type SyncResult } from '../lib/vinted/sync';
@@ -99,6 +100,15 @@ export function VintedSyncScreen() {
           <Field label="Importer les e-mails à partir du" hint="Les e-mails plus anciens ne sont pas lus.">
             <input type="date" className="input" value={since} max={todayISO()} onChange={(e) => { setSince(e.target.value); if (e.target.value) saveSettings({ syncSince: e.target.value }); }} />
           </Field>
+          <div style={{ marginTop: 4 }}>
+            <label className="check" style={{ marginBottom: 10 }}>
+              <input type="checkbox" checked={s.saleAlert !== false} onChange={(e) => saveSettings({ saleAlert: e.target.checked })} />
+              <span><b>Bannière et son « ka-ching » à chaque vente</b><br /><span className="small muted">Dès qu'une nouvelle vente arrive à l'ouverture de l'appli. Le son suit le mode silencieux de ton iPhone.</span></span>
+            </label>
+            <button className="btn btn-ghost btn-sm" onClick={() => announceSales([{ id: 'test', title: 'Exemple : Robe longue rose à fleurs - Taille S', amount: 8000, recorded: true }])}>
+              Tester la notification
+            </button>
+          </div>
 
           {recent && recent.length > 0 && (
             <>

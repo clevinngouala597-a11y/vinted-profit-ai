@@ -193,6 +193,21 @@ describe('Article revendu plusieurs fois (annulations, remboursements)', () => {
   });
 });
 
+describe('Alerte nouvelle vente', () => {
+  it('seules les ventes récentes et nouvelles déclenchent la bannière', async () => {
+    await saveSettings({ syncSince: '2026-09-01' });
+    await buy('Jogging gris léopard', 700);
+    inbox = [
+      sold('old', '2026-10-01T10:00:00Z', 'Sweat gris - Taille L', '40,00'), // historique : pas d'alerte
+      sold('new', '2026-10-26T20:28:00Z', 'Jogging gris clair motif léopard Streetwear - Taille L', '29,00'),
+    ];
+    const r = await syncNow(fakeScript, '2026-10-27');
+    expect(r.newSales).toEqual([{ id: 'new', title: 'Jogging gris clair motif léopard Streetwear - Taille L', amount: 2900, recorded: true }]);
+    const again = await syncNow(fakeScript, '2026-10-27');
+    expect(again.newSales).toEqual([]);
+  });
+});
+
 describe('Script Google', () => {
   it('ne répond qu’avec la bonne clé, filtre la recherche et nettoie le texte', () => {
     const queries: string[] = [];

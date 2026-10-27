@@ -199,6 +199,28 @@ textarea.input { min-height: 80px; resize: vertical; }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar) + var(--safe-b) + 14px); z-index: 60; background: var(--text); color: var(--bg); font-weight: 700; padding: 11px 16px; border-radius: 14px; font-size: 14px; max-width: calc(100% - 32px); animation: up 0.2s ease-out; }
 
+/* ---------- Bannière « nouvelle vente » ---------- */
+.sale-banner {
+  position: fixed; z-index: 80; left: 10px; right: 10px; top: calc(var(--safe-t) + 8px);
+  max-width: 520px; margin: 0 auto; display: flex; align-items: center;
+  background: rgba(28, 32, 29, 0.94); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  border: 1px solid rgba(99, 247, 123, 0.35); border-radius: 22px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  animation: banner-in 0.42s cubic-bezier(0.2, 0.9, 0.25, 1.15);
+}
+.sale-banner.leaving { animation: banner-out 0.3s ease-in forwards; }
+.sale-banner-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 11px; padding: 11px 4px 11px 12px; background: none; border: 0; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.sale-banner-body img { border-radius: 9px; flex: none; }
+.sale-banner-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.sale-banner-app { font-size: 11px; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
+.sale-banner-text b { font-size: 15px; }
+.sale-banner-line { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sale-banner-amount { flex: none; font-weight: 900; font-size: 17px; color: var(--green); font-variant-numeric: tabular-nums; }
+.sale-banner-close { flex: none; width: 36px; height: 44px; background: none; border: 0; color: var(--muted); font-size: 22px; cursor: pointer; }
+@keyframes banner-in { from { transform: translateY(-130%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes banner-out { to { transform: translateY(-130%); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sale-banner, .sale-banner.leaving { animation-duration: 0.01s; } }
+
 /* ---------- États ---------- */
 .empty { text-align: center; padding: 30px 18px; background: var(--card); border: 1px dashed var(--line); border-radius: var(--r-card); }
 .empty-title { font-weight: 800; font-size: 16px; }

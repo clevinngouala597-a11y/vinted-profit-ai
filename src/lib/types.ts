@@ -36,6 +36,8 @@ export interface Settings {
   /** Les e-mails antérieurs à cette date ne sont pas importés. */
   syncSince: ISODate | null;
   lastSyncAt: ISOTime | null;
+  /** Bannière et son de caisse à chaque nouvelle vente. */
+  saleAlert: boolean;
 }
 
 export const DEFAULT_CATEGORIES = [
