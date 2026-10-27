@@ -17,7 +17,7 @@ import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { labelList, labelsToPrint } from '../lib/vinted/labels';
 import { RevenueProfitChart } from '../ui/charts';
-import { IBell, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
+import { IChart as IChartBar, IBell, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
 import { NotifRow, useNotifications } from './Notifications';
@@ -165,6 +165,7 @@ export function Home() {
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Bordereaux à imprimer" sub="Tous tes bordereaux Vinted en un seul PDF" to="bordereaux" close={() => setMenu(false)} />
         <MenuLink icon={<IMail width={18} height={18} />} title="Synchro Vinted (Gmail)" sub={ds.settings.syncUrl ? 'Active : ventes et achats enregistrés seuls' : 'Enregistre tes ventes sans les saisir'} to="synchro" close={() => setMenu(false)} />
         <MenuLink icon={<ITarget width={18} height={18} />} title="Objectifs" sub="Bénéfice, ventes, budget, stock" to="objectifs" close={() => setMenu(false)} />
+        <MenuLink icon={<IChartBar width={18} height={18} />} title="Statistiques" sub="Meilleurs jours, marques, tailles, délai de vente" to="statistiques" close={() => setMenu(false)} />
         <MenuLink icon={<ITrend width={18} height={18} />} title="Prévisions" sub="Trésorerie et résultat à 30, 60, 90 jours" to="previsions" close={() => setMenu(false)} />
         <MenuLink icon={<IScale width={18} height={18} />} title="Fiscalité" sub="Recettes, seuils, cotisations, livre des recettes" to="fiscal" close={() => setMenu(false)} />
         <MenuLink icon={<ICalc width={18} height={18} />} title="Calculateur de prix" sub="Simule un prix avant de publier" to="calculateur" close={() => setMenu(false)} />

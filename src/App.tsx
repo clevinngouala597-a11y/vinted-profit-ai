@@ -24,6 +24,7 @@ import { NotificationsScreen } from './screens/Notifications';
 import { ForecastScreen } from './screens/Forecast';
 import { Fiscal } from './screens/Fiscal';
 import { Labels } from './screens/Labels';
+import { Stats } from './screens/Stats';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
 import { useUI } from './ui/kit';
@@ -71,6 +72,7 @@ function Shell() {
     case 'a-valider': screen = <SyncInbox />; break;
     case 'couts': screen = <MissingCosts />; break;
     case 'bordereaux': screen = <Labels />; break;
+    case 'statistiques': screen = <Stats />; break;
     default: screen = <Home />;
   }
 
