@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cancelSale, correctSale, markItemRecovered, markPaymentReceived, recordRefund, setOrderStatus } from '../lib/actions';
+import { cancelSale, completeItemCost, correctSale, deleteSale, markItemRecovered, markPaymentReceived, recordRefund, setOrderStatus, updateItem } from '../lib/actions';
 import { isAwaitingPayment, saleBreakdown } from '../lib/engine';
 import { centsToInput, formatEuros, formatPercent, parseEuros } from '../lib/money';
 import { formatDate, todayISO } from '../lib/period';
@@ -40,6 +40,7 @@ export function SaleDetail({ id }: { id: string }) {
         {sale.paymentStatus === 'recu' && <span className="badge green">Paiement reçu</span>}
         {isAwaitingPayment(ds, sale) && <span className="badge warn">Paiement en attente</span>}
         {b.isLoss && !b.cancelled && <span className="badge red">Vente à perte</span>}
+        <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto', padding: '4px 14px', minHeight: 0 }} onClick={() => setFixOpen(true)}>✏️ Modifier</button>
       </div>
       <ErrorBox error={error} />
 
@@ -133,8 +134,8 @@ export function SaleDetail({ id }: { id: string }) {
         {sale.notes && <><dt>Notes</dt><dd style={{ textAlign: 'left', fontWeight: 400, whiteSpace: 'pre-wrap' }}>{sale.notes}</dd></>}
       </dl>
 
-      {!b.cancelled && <button className="btn btn-ghost btn-sm" style={{ marginTop: 10 }} onClick={() => setFixOpen(true)}>Corriger un montant ou la date</button>}
-      {fixOpen && <FixSaleSheet saleId={id} onClose={() => setFixOpen(false)} />}
+      <button className="btn btn-ghost" style={{ marginTop: 12, width: '100%' }} onClick={() => setFixOpen(true)}>✏️ Modifier la vente</button>
+      {fixOpen && <EditSaleSheet saleId={id} onClose={() => setFixOpen(false)} />}
       {refundOpen && <RefundSheet saleId={id} max={remaining} onClose={() => setRefundOpen(false)} />}
     </>
   );
@@ -176,10 +177,16 @@ function RefundSheet({ saleId, max, onClose }: { saleId: string; max: number; on
   );
 }
 
-function FixSaleSheet({ saleId, onClose }: { saleId: string; onClose: () => void }) {
+function EditSaleSheet({ saleId, onClose }: { saleId: string; onClose: () => void }) {
   const ds = useData();
   const ui = useUI();
   const sale = ds.sales.find((x) => x.id === saleId)!;
+  const cancelled = sale.orderStatus === 'annulee';
+  const hasRefund = ds.refunds.some((r) => r.saleId === saleId);
+  const lines = ds.saleLines.filter((l) => l.saleId === saleId);
+  const items = lines.map((l) => ds.items.find((i) => i.id === l.itemId)).filter((x): x is NonNullable<typeof x> => !!x);
+  const [names, setNames] = useState(() => Object.fromEntries(items.map((i) => [i.id, i.name])));
+  const [costs, setCosts] = useState(() => Object.fromEntries(items.map((i) => [i.id, i.costPending ? '' : centsToInput(i.purchasePrice + i.directFees)])));
   const [f, setF] = useState({
     date: sale.date,
     sellerRevenue: centsToInput(sale.sellerRevenue),
@@ -187,34 +194,72 @@ function FixSaleSheet({ saleId, onClose }: { saleId: string; onClose: () => void
     packagingCost: centsToInput(sale.packagingCost),
     otherCosts: centsToInput(sale.otherCosts),
   });
-  const [reason, setReason] = useState('');
   const { error, run, busy } = useAction();
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
+
+  const save = async () => {
+    const ok = await run(async () => {
+      // tout est vérifié avant la moindre modification
+      const newCosts: Record<string, number> = {};
+      for (const it of items) {
+        if (!names[it.id]?.trim()) throw new Error("Le nom de l'article ne peut pas être vide.");
+        if (costs[it.id].trim() === '') continue;
+        const c = parseEuros(costs[it.id]);
+        if (c === null || c < 0) throw new Error(`Prix d'achat invalide pour « ${names[it.id]} ».`);
+        newCosts[it.id] = c;
+      }
+      const vals = {} as Record<'sellerRevenue' | 'platformFees' | 'packagingCost' | 'otherCosts', number>;
+      if (!cancelled)
+        for (const k of ['sellerRevenue', 'platformFees', 'packagingCost', 'otherCosts'] as const) {
+          const v = f[k].trim() === '' ? 0 : parseEuros(f[k]);
+          if (v === null) throw new Error('Un des montants saisis est invalide.');
+          vals[k] = v;
+        }
+      for (const it of items) {
+        if (names[it.id].trim() !== it.name) await updateItem(it.id, { name: names[it.id].trim() });
+        if (newCosts[it.id] !== undefined && (it.costPending || newCosts[it.id] !== it.purchasePrice + it.directFees)) await completeItemCost(it.id, newCosts[it.id]);
+      }
+      if (!cancelled) await correctSale(saleId, { date: f.date, ...vals }, 'Modification manuelle');
+      return true;
+    });
+    if (ok) { ui.toast('Vente modifiée'); onClose(); }
+  };
+
+  const remove = async () => {
+    const ok = await ui.confirm({
+      title: 'Supprimer cette vente ?',
+      text: "À utiliser si elle a été enregistrée par erreur : elle disparaît du chiffre d'affaires, du bénéfice et de la trésorerie, et la synchro ne la recréera pas.",
+      confirmLabel: 'Supprimer',
+      danger: true,
+    });
+    if (!ok) return;
+    const done = await run(async () => { await deleteSale(saleId); return true; });
+    if (done) { ui.toast('Vente supprimée'); onClose(); go('ventes'); }
+  };
+
   return (
-    <Sheet open onClose={onClose} title="Corriger la vente">
-      <p className="muted small" style={{ marginTop: 0 }}>La vente n'est pas effacée : la différence est enregistrée en ajustement et l'avant/après reste dans le journal.</p>
+    <Sheet open onClose={onClose} title="Modifier la vente">
       <ErrorBox error={error} />
-      <div className="cols">
-        <Field label="Date de la commande"><input type="date" className="input" value={f.date} max={todayISO()} onChange={(e) => set('date')(e.target.value)} /></Field>
-        <Field label="Montant encaissé"><MoneyInput value={f.sellerRevenue} onChange={set('sellerRevenue')} /></Field>
-        <Field label="Frais à ta charge"><MoneyInput value={f.platformFees} onChange={set('platformFees')} /></Field>
-        <Field label="Emballage"><MoneyInput value={f.packagingCost} onChange={set('packagingCost')} /></Field>
-      </div>
-      <Field label="Autres coûts"><MoneyInput value={f.otherCosts} onChange={set('otherCosts')} /></Field>
-      <Field label="Raison de la correction"><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Montant vérifié sur Vinted, erreur de saisie…" /></Field>
-      <button className="btn btn-primary" disabled={busy} onClick={async () => {
-        const ok = await run(async () => {
-          const vals = {} as Record<'sellerRevenue' | 'platformFees' | 'packagingCost' | 'otherCosts', number>;
-          for (const k of ['sellerRevenue', 'platformFees', 'packagingCost', 'otherCosts'] as const) {
-            const v = f[k].trim() === '' ? 0 : parseEuros(f[k]);
-            if (v === null) throw new Error('Un des montants saisis est invalide.');
-            vals[k] = v;
-          }
-          await correctSale(saleId, { date: f.date, ...vals }, reason);
-          return true;
-        });
-        if (ok) { ui.toast('Vente corrigée'); onClose(); }
-      }}>Enregistrer la correction</button>
+      {items.map((it) => (
+        <div key={it.id} className="line-card" style={{ paddingBottom: 6 }}>
+          <Field label="Nom de l'article"><input className="input" value={names[it.id]} onChange={(e) => setNames({ ...names, [it.id]: e.target.value })} /></Field>
+          <Field label="Prix d'achat" hint={it.costPending ? 'Pas encore indiqué.' : undefined}><MoneyInput value={costs[it.id]} onChange={(v) => setCosts({ ...costs, [it.id]: v })} /></Field>
+        </div>
+      ))}
+      {!cancelled && (
+        <>
+          <div className="cols">
+            <Field label="Date de la vente"><input type="date" className="input" value={f.date} max={todayISO()} onChange={(e) => set('date')(e.target.value)} /></Field>
+            <Field label="Montant encaissé"><MoneyInput value={f.sellerRevenue} onChange={set('sellerRevenue')} /></Field>
+            <Field label="Frais à ta charge"><MoneyInput value={f.platformFees} onChange={set('platformFees')} /></Field>
+            <Field label="Emballage"><MoneyInput value={f.packagingCost} onChange={set('packagingCost')} /></Field>
+          </div>
+          <Field label="Autres coûts"><MoneyInput value={f.otherCosts} onChange={set('otherCosts')} /></Field>
+        </>
+      )}
+      <p className="tiny faint" style={{ marginTop: 0 }}>Le bénéfice et la trésorerie sont recalculés ; l'avant/après reste dans le journal.</p>
+      <button className="btn btn-primary" disabled={busy} onClick={save}>Enregistrer</button>
+      {!hasRefund && <button className="btn btn-danger" style={{ marginTop: 10, width: '100%' }} disabled={busy} onClick={remove}>Supprimer cette vente</button>}
     </Sheet>
   );
 }

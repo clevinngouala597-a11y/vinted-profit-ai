@@ -5,6 +5,11 @@ import { normalizeText, parseVintedEmail, titleSimilarity, type RawEmail } from 
 const mail = (subject: string, text: string, date = '2026-10-22T09:10:49Z', id = 'm1'): RawEmail => ({ id, date, subject, text });
 
 describe('Lecture des e-mails Vinted', () => {
+  it('vente : la photo « [image: …] » de Gmail est ignorée', () => {
+    const ev = parseVintedEmail({ id: 'x', date: '2026-10-04T00:32:55Z', subject: "Ton article s'est vendu !", text: 'Bonjour clevinnng, omidi a acheté [image: Montre argentée homme/femme - cadran effet CD multicolore] Montre argentée homme/femme - cadran effet CD multicolore 50,00 € Nous transférerons le paiement' });
+    expect(ev).toMatchObject({ kind: 'sale', title: 'Montre argentée homme/femme - cadran effet CD multicolore', amount: 5000 });
+  });
+
   it('vente (format tableau de Gmail)', () => {
     const e = parseVintedEmail(mail("Ton article s'est vendu !", `E-mail Vinted\n\n| Bonjour vendeur42, acheteuse_7 a acheté |\n| | Robe longue rose à fleurs - Taille S 80,00 € |\n\nNous transférerons le paiement sur ton porte-monnaie Vinted une fois la commande terminée.`));
     expect(e).toMatchObject({ kind: 'sale', title: 'Robe longue rose à fleurs - Taille S', amount: 8000, buyer: 'acheteuse_7', date: '2026-10-22' });

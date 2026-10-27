@@ -45,6 +45,8 @@ export function normalizeText(s: string): string {
   return s
     .replace(/&#39;|&quot;|&amp;|&lt;|&gt;|&nbsp;/g, (m) => ENTITIES[m])
     .replace(/https?:\/\/\S+/g, ' ')
+    // Gmail (getPlainBody) écrit la photo de l'article « [image: titre] » juste avant le titre
+    .replace(/\[image:[^\]]*\]/gi, ' ')
     .replace(/\[\]\(\s*\)/g, ' ')
     .replace(/[|*#]/g, ' ')
     .replace(/[’`]/g, "'")

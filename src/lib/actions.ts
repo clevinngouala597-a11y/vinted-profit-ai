@@ -384,6 +384,49 @@ export async function cancelSale(saleId: string, date: ISODate = todayISO()) {
   });
 }
 
+export const AUTO_ITEM_SOURCE = 'Créé par la synchro Vinted';
+
+/**
+ * Supprime une vente enregistrée par erreur, comme si elle n'avait jamais existé (trace gardée au journal).
+ * Un article créé automatiquement pour cette vente est supprimé avec elle ; un article du stock y revient.
+ * Les e-mails Vinted correspondants sont marqués écartés : la synchro ne la recréera pas.
+ */
+export async function deleteSale(saleId: string) {
+  const db = getDb();
+  await db.transaction('rw', [db.sales, db.saleLines, db.items, db.purchases, db.purchaseLines, db.transactions, db.inventoryMovements, db.refunds, db.expenses, db.syncedEmails, db.auditLogs], async () => {
+    const sale = await db.sales.get(saleId);
+    if (!sale) fail('Vente introuvable.');
+    if ((await db.refunds.where('saleId').equals(saleId).count()) > 0) fail('Cette vente a un remboursement : supprime-le ou garde la vente.');
+    const lines = await db.saleLines.where('saleId').equals(saleId).toArray();
+    for (const t of await db.transactions.where('refId').equals(saleId).toArray()) await db.transactions.delete(t.id);
+    for (const e of await db.expenses.where('saleId').equals(saleId).toArray()) await db.expenses.update(e.id, { saleId: null });
+    for (const m of await db.inventoryMovements.where('itemId').anyOf(lines.map((l) => l.itemId)).filter((m) => m.refId === saleId).toArray()) await db.inventoryMovements.delete(m.id);
+    await db.saleLines.where('saleId').equals(saleId).delete();
+    await db.sales.delete(saleId);
+    for (const l of lines) {
+      const it = await db.items.get(l.itemId);
+      if (!it) continue;
+      const purchase = it.purchaseId ? await db.purchases.get(it.purchaseId) : undefined;
+      const otherSales = await db.saleLines.where('itemId').equals(it.id).count();
+      const autoCreated = purchase?.source === AUTO_ITEM_SOURCE && (await db.purchaseLines.where('purchaseId').equals(purchase.id).count()) === 1;
+      if (autoCreated && otherSales === 0) {
+        for (const t of await db.transactions.where('refId').anyOf(purchase!.id, it.id).toArray()) await db.transactions.delete(t.id);
+        await db.purchaseLines.where('purchaseId').equals(purchase!.id).delete();
+        await db.purchases.delete(purchase!.id);
+        for (const m of await db.inventoryMovements.where('itemId').equals(it.id).toArray()) await db.inventoryMovements.delete(m.id);
+        await db.items.delete(it.id);
+      } else if (otherSales === 0 || !['vendu', 'expedie', 'termine'].includes(it.status)) {
+        await db.items.update(it.id, { status: 'en_vente', soldAt: null, updatedAt: now() });
+      }
+    }
+    // la synchro ne doit pas recréer cette vente
+    const rows = await db.syncedEmails.toArray();
+    const saleRows = rows.filter((r) => r.ref === saleId);
+    for (const r of saleRows) await db.syncedEmails.update(r.id, { status: 'ignored', note: r.kind === 'sale' ? 'Vente supprimée à la main' : 'Vente écartée : suite ignorée', ref: null, resolvedAt: now() });
+    await audit('sale', saleId, 'suppression', `${sale!.date} · ${sale!.sellerRevenue} c`);
+  });
+}
+
 export interface SaleCorrection {
   date?: ISODate;
   listedPrice?: Cents;
@@ -680,6 +723,9 @@ export async function completeItemCost(id: string, cost: Cents) {
           await db.transactions.add(tx({ date: p.date, amount: -total, kind: 'achat', status: 'confirme', refType: 'purchase', refId: p.id, label: `Achat · ${p.source || it!.name}` }));
       }
     }
+    // les anciennes corrections de coût de cet article sont remplacées par la nouvelle valeur (déjà dans l'achat)
+    for (const t of await db.transactions.where('refId').equals(id).toArray())
+      if (t.refType === 'item' && t.kind === 'ajustement' && t.label.startsWith('Correction du coût')) await db.transactions.delete(t.id);
     for (const l of await db.saleLines.where('itemId').equals(id).toArray()) await db.saleLines.update(l.id, { cogs: cost });
     await audit('item', id, "prix d'achat indiqué", `${before} c → ${cost} c`);
   });

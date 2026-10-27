@@ -12,6 +12,7 @@
  * Rien n'est jamais enregistré deux fois : une vente déjà saisie à la main est reconnue.
  */
 import {
+  AUTO_ITEM_SOURCE,
   cancelSale,
   correctSale,
   findDuplicateExpenses,
@@ -150,7 +151,7 @@ const SKIPPED = `Non comptée : aucun paiement Vinted après ${NO_PAYMENT_DAYS} 
 /** Crée l'article vendu quand il n'est pas dans le stock (mode automatique) : prix d'achat à compléter. */
 async function autoItem(title: string, date: ISODate): Promise<string> {
   const { itemIds } = await recordPurchase({
-    date, source: 'Créé par la synchro Vinted', commonFees: 0, lotPrice: null,
+    date, source: AUTO_ITEM_SOURCE, commonFees: 0, lotPrice: null,
     notes: "Article créé automatiquement à partir d'un e-mail Vinted : indique son prix d'achat.",
     lines: [{ name: title.replace(/\s*[-–]\s*Taille\s+\S+$/i, '').trim() || title, category: guessCategory(title), price: 0, targetPrice: null, status: 'en_vente', costPending: true }],
   });
@@ -476,7 +477,26 @@ export function syncNow(fetcher: typeof fetch = fetch, today: ISODate = new Date
   return inflight;
 }
 
+const IMG = /\[image:[^\]]*\]/gi;
+const stripImg = (t: string) => t.replace(IMG, ' ').replace(/\s+/g, ' ').trim();
+
+/** Répare les titres enregistrés avant la correction du « [image: …] » de Gmail. */
+export async function repairTitles() {
+  const db = getDb();
+  for (const r of await db.syncedEmails.toArray()) {
+    if (!/\[image:/i.test(r.title)) continue;
+    const ev = r.event && typeof r.event === 'object' && 'title' in (r.event as object) ? { ...(r.event as object), title: stripImg((r.event as { title: string }).title) } : r.event;
+    await db.syncedEmails.update(r.id, { title: stripImg(r.title), event: ev });
+  }
+  for (const it of (await loadDataset()).items) {
+    if (!/\[image:/i.test(it.name) && !/\[image:/i.test(it.listingRef)) continue;
+    const name = stripImg(it.name).replace(/\s*[-–]\s*Taille\s+\S+$/i, '').trim() || it.name;
+    await updateItem(it.id, { name, listingRef: stripImg(it.listingRef) });
+  }
+}
+
 async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResult> {
+  await repairTitles();
   const ds = await loadDataset();
   const { syncUrl, syncToken } = ds.settings;
   if (!syncUrl || !syncToken) throw new SyncError('La synchronisation Gmail n’est pas encore configurée.');

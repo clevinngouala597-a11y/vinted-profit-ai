@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { VPDatabase, getDb, setDb } from '../src/lib/db';
-import { completeItemCost, defaultSettings, loadDataset, recordPurchase, recordSale, saveSettings } from '../src/lib/actions';
+import { completeItemCost, correctSale, deleteSale, updateItem, defaultSettings, loadDataset, recordPurchase, recordSale, saveSettings } from '../src/lib/actions';
 import { cashState, periodMetrics, saleBreakdown } from '../src/lib/engine';
 import { dismissSynced, fetchVintedEmails, guessCategory, resolveSale, syncNow, unpaidInboxSales } from '../src/lib/vinted/sync';
 import type { RawEmail } from '../src/lib/vinted/parse';
@@ -249,6 +249,52 @@ describe('Mode automatique (sans « À valider »)', () => {
     await saveSettings({ autoRecord: true, lastSyncAt: null });
     expect((await syncNow(fakeScript, '2026-10-27')).inbox).toBe(0);
     expect((await loadDataset()).sales).toHaveLength(1);
+  });
+});
+
+describe('Modifier ou supprimer une vente synchronisée', () => {
+  it('modifier : nom, prix d’achat, montant ; supprimer : tout disparaît et ne revient pas', async () => {
+    await saveSettings({ autoRecord: true, syncSince: '2026-10-01' });
+    const M = 'Montre argentée homme/femme - cadran effet CD multicolore';
+    inbox = [
+      { id: 'm', date: '2026-10-04T00:32:55Z', subject: "Ton article s'est vendu !", text: `Bonjour clevinnng, omidi a acheté [image: ${M}] ${M} 50,00 € Nous transférerons le paiement` },
+      sold('r', '2026-10-22T09:10:49Z', 'Robe longue rose - Taille S', '80,00'),
+    ];
+    await syncNow(fakeScript, '2026-10-27');
+    let ds = await loadDataset();
+    const montre = ds.sales.find((x) => x.date === '2026-10-04')!;
+    const item = ds.items.find((i) => i.id === ds.saleLines.find((l) => l.saleId === montre.id)!.itemId)!;
+    expect(item.name).toBe('Montre argentée homme/femme - cadran effet CD multicolore');
+
+    // modifier
+    await updateItem(item.id, { name: 'Montre CD' });
+    await completeItemCost(item.id, 1399);
+    await completeItemCost(item.id, 1200); // deuxième correction : pas de double comptage
+    await correctSale(montre.id, { sellerRevenue: 4800 }, 'Modification manuelle');
+    ds = await loadDataset();
+    expect(saleBreakdown(ds, ds.sales.find((x) => x.id === montre.id)!).profit).toBe(3600);
+    expect(cashState(ds).balance).toBe(10000 - 1200);
+    expect(cashState(ds).pendingIn).toBe(4800 + 8000);
+
+    // supprimer la robe (erreur) : CA, trésorerie, article créé… tout disparaît
+    const robe = ds.sales.find((x) => x.date === '2026-10-22')!;
+    await deleteSale(robe.id);
+    ds = await loadDataset();
+    expect(ds.sales).toHaveLength(1);
+    expect(ds.items).toHaveLength(1);
+    expect(cashState(ds).pendingIn).toBe(4800);
+    expect(periodMetrics(ds, '2026-10-01', '2026-10-31').revenue).toBe(4800);
+    // la synchro suivante ne la recrée pas
+    await saveSettings({ lastSyncAt: null });
+    await syncNow(fakeScript, '2026-10-27');
+    expect((await loadDataset()).sales).toHaveLength(1);
+  });
+
+  it('titres « [image: …] » déjà enregistrés : réparés à la synchro suivante', async () => {
+    await saveSettings({ autoRecord: true, syncSince: '2026-10-01' });
+    const { itemIds } = await recordPurchase({ date: '2026-10-04', source: 'Créé par la synchro Vinted', commonFees: 0, lotPrice: null, lines: [{ name: '[image: Montre argentée] Montre argentée', category: 'Accessoires', price: 0, targetPrice: null, status: 'en_vente' }] });
+    await syncNow(fakeScript, '2026-10-27');
+    expect((await loadDataset()).items.find((i) => i.id === itemIds[0])!.name).toBe('Montre argentée');
   });
 });
 
