@@ -84,6 +84,15 @@ Les règles de calcul sont détaillées dans [docs/methodes-de-calcul.md](docs/m
 - **Verrouillage Face ID** : Réglages → Verrouillage. Un code de secours (4 à 6 chiffres, seule son empreinte est gardée) est obligatoire, puis Face ID / Touch ID via une clé d'accès de l'iPhone (WebAuthn, `src/lib/lock.ts`). L'appli se verrouille à l'ouverture et au retour après le délai choisi (toujours, 1, 5 ou 15 min) ; son aperçu est flouté dans le sélecteur d'apps. C'est un verrou d'écran : les données restent sur l'appareil, non chiffrées.
 - **Plusieurs dressings** : Réglages → Dressings. Chaque achat, article, vente et dépense appartient à un dressing (`shop`, absent = principal, donc aucune migration). L'accueil propose « Tous » (total commun) ou un dressing ; tous les écrans affichent alors ce dressing (`scopeDataset` dans `src/lib/shops.ts`). Une vente prend le dressing de son article ; la trésorerie de départ appartient au dressing principal. La synchro lit le pseudo de « Bonjour <pseudo> » dans chaque e-mail Vinted et range l'opération dans le dressing de ce pseudo (pseudo inconnu : principal), avec un rapprochement des ventes limité à ce dressing.
 
+### Connexion Google (synchro simple)
+
+Par défaut, la synchro se fait avec **« Se connecter avec Google »** : redirection vers Google (flux OAuth « token », sans serveur ni script externe), puis l'appli lit elle-même les e-mails Vinted avec l'API Gmail (`src/lib/google/`). Accès demandés : Gmail en lecture seule, Drive limité aux fichiers créés par l'appli (sauvegardes), adresse e-mail. Le jeton (1 h) reste dans le stockage local de l'appareil ; à expiration, une reconnexion silencieuse le renouvelle au plus toutes les 30 minutes.
+
+- Identifiant client OAuth : `VITE_GOOGLE_CLIENT_ID` ou `src/lib/google/config.ts` (public par nature). Sans lui, le bouton affiche « Bientôt disponible ».
+- Projet Google Cloud en mode **test** : 100 utilisateurs maximum, ajoutés comme « utilisateurs test », écran « appli non validée », reconnexion complète tous les 7 jours. Pour le public : validation Google + évaluation de sécurité CASA (Gmail est un accès « restreint »).
+- L'ancienne méthode par script Google reste disponible mais masquée (option avancée) : elle s'affiche si elle est déjà utilisée, ou via `#/synchro?avance`.
+- Les notifications « appli fermée » (ntfy) nécessitent le script ; avec la connexion Google, l'alerte de vente se fait à l'ouverture de l'appli.
+
 ### Sécurité
 
 - **Données** : uniquement sur l'appareil (IndexedDB) et, si activée, dans le Google Drive de l'utilisateur via son propre script. Aucun serveur tiers.

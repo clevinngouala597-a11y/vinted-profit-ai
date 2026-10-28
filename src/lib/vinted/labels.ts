@@ -176,8 +176,12 @@ export const base64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (c) => 
 /** Télécharge les PDF des bordereaux (par paquets, via le script Google) et les assemble en un seul PDF. */
 export async function buildLabelsPdf(ids: string[], format: 'etiquette' | 'a4', fetcher: typeof fetch = fetch) {
   const { callScript } = await import('./drive');
+  const { loadDataset } = await import('../actions');
   const got: { id: string; pdf?: string; error?: string }[] = [];
-  for (let i = 0; i < ids.length; i += 10) {
+  if ((await loadDataset()).settings.syncMode === 'google') {
+    const { fetchGmailLabels } = await import('../google/gmail');
+    got.push(...(await fetchGmailLabels(ids, fetcher)));
+  } else for (let i = 0; i < ids.length; i += 10) {
     const body = await callScript('bordereaux', { method: 'GET' }, fetcher, `&ids=${ids.slice(i, i + 10).join(',')}`);
     if (!Array.isArray(body.bordereaux)) throw new Error('Ton script Google ne sait pas encore envoyer les bordereaux : mets-le à jour (version 3).');
     got.push(...(body.bordereaux as typeof got));

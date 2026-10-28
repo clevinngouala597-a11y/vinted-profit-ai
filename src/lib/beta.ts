@@ -17,7 +17,7 @@ export const LOCKED: Record<string, string> = {
   previsions: 'Prévisions', fiscal: 'Fiscalité', tresorerie: 'Trésorerie et réinvestissement', exports: 'Exports et sauvegarde', import: 'Import',
   annonce: 'Annonce IA', photos: 'Photos IA',
   messages: 'Messages prêts', republier: 'À republier', calculateur: 'Calculateur de prix', resume: 'Résumé du mois',
-  synchro: 'Synchro Vinted (Gmail)', 'a-valider': 'Opérations à valider', couts: "Prix d'achat à indiquer", bordereaux: 'Bordereaux',
+  bordereaux: 'Bordereaux',
 };
 export const isLocked = (route: string | undefined) => BETA && !!route && route.split('?')[0] in LOCKED && (!isAdmin() || viewAsTester());
 

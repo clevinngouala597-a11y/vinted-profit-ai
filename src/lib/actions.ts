@@ -79,6 +79,8 @@ export function defaultSettings(today = todayISO()): Settings {
     activeShop: 'all',
     backupKey: null,
     backupSalt: null,
+    syncMode: null,
+    googleEmail: null,
     ntfyTopic: '',
     scriptVersion: null,
     scriptNotifications: false,

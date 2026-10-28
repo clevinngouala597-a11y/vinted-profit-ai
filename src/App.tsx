@@ -67,7 +67,7 @@ export function App() {
 async function refresh(): Promise<string> {
   const { loadDataset } = await import('./lib/actions');
   const s = (await loadDataset()).settings;
-  if (!s.syncUrl || !s.syncToken) return 'À jour';
+  if (s.syncMode !== 'google' && (!s.syncUrl || !s.syncToken)) return 'À jour';
   if (!navigator.onLine) throw new Error('Pas de connexion internet');
   const r = await syncNow();
   return r.newSales.length ? `${r.newSales.length} nouvelle${r.newSales.length > 1 ? 's' : ''} vente${r.newSales.length > 1 ? 's' : ''} !` : `À jour · ${syncSummary(r)}`;
@@ -199,13 +199,47 @@ function useAutoSync() {
   const ui = useUI();
   const toast = useRef(ui.toast);
   toast.current = ui.toast;
+  // retour de la connexion Google
+  useEffect(() => {
+    const r = (window as unknown as { __googleRedirect?: import('./lib/google/auth').RedirectResult }).__googleRedirect;
+    (window as unknown as { __googleRedirect?: unknown }).__googleRedirect = null;
+    if (!r) return;
+    if (!r.ok) {
+      if (!r.silent) toast.current(r.error);
+      return;
+    }
+    (async () => {
+      const { saveSettings } = await import('./lib/actions');
+      const { loadEmail } = await import('./lib/google/auth');
+      const email = await loadEmail();
+      await saveSettings({ syncMode: 'google', ...(email ? { googleEmail: email } : {}) });
+      try {
+        const res = await syncNow();
+        if (!res.newSales.length) toast.current(`Gmail connecté · ${syncSummary(res)}`);
+      } catch (e) {
+        toast.current(e instanceof Error ? e.message : 'Synchro impossible pour le moment');
+      }
+    })();
+  }, []);
   useEffect(() => {
     const tick = async () => {
       if (document.visibilityState === 'hidden' || !navigator.onLine) return;
       const { loadDataset } = await import('./lib/actions');
       const s = (await loadDataset()).settings;
-      if (!s.syncUrl || !s.syncToken) return;
+      const google = s.syncMode === 'google';
+      if (!google && (!s.syncUrl || !s.syncToken)) return;
       if (s.lastSyncAt && Date.now() - Date.parse(s.lastSyncAt) < 120_000) return;
+      if (google) {
+        const { getSession, tokenValid, startGoogleLogin } = await import('./lib/google/auth');
+        if (!tokenValid(getSession())) {
+          // jeton expiré : reconnexion silencieuse chez Google (au plus une fois toutes les 30 min)
+          const last = Number(localStorage.getItem('cng-google-silent-at') ?? 0);
+          if (Date.now() - last < 30 * 60_000 || !navigator.onLine) return;
+          try { localStorage.setItem('cng-google-silent-at', String(Date.now())); } catch { /* */ }
+          startGoogleLogin({ silent: true, hint: s.googleEmail });
+          return;
+        }
+      }
       try {
         const r = await syncNow();
         // les nouvelles ventes ont leur propre bannière (avec le son) ; le reste est résumé discrètement

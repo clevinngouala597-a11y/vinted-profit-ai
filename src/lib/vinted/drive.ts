@@ -39,6 +39,12 @@ export async function driveBackup(fetcher: typeof fetch = fetch): Promise<string
   const plain = await (await createBackup(true)).text();
   // chiffrée avec le mot de passe de sauvegarde, s'il y en a un
   const text = s.backupKey && s.backupSalt ? JSON.stringify(await encryptText(plain, s.backupKey, s.backupSalt)) : plain;
+  if (s.syncMode === 'google') {
+    const { googleDriveBackup } = await import('../google/drive');
+    const name = await googleDriveBackup(text, new Date().toISOString().slice(0, 10), fetcher);
+    await saveSettings({ driveBackupAt: new Date().toISOString(), lastBackupAt: new Date().toISOString() });
+    return name;
+  }
   // text/plain : pas de requête préalable du navigateur, accepté par Google Apps Script
   const body = await callScript('sauvegarder', { method: 'POST', body: text, headers: { 'Content-Type': 'text/plain;charset=utf-8' } }, fetcher);
   if (!body.ok) throw new SyncError('Ton script Google ne sait pas encore sauvegarder : mets-le à jour (version 2).');
@@ -52,7 +58,13 @@ export class PasswordNeeded extends Error {
 
 /** Remplace toutes les données de l'application par la dernière sauvegarde du Drive. */
 export async function driveRestore(fetcher: typeof fetch = fetch, password?: string) {
-  const body = await callScript('restaurer', { method: 'GET' }, fetcher);
+  let body: Record<string, unknown>;
+  if ((await loadDataset()).settings.syncMode === 'google') {
+    const { googleDriveLatest } = await import('../google/drive');
+    const latest = await googleDriveLatest(fetcher);
+    if (!latest) throw new SyncError('Aucune sauvegarde dans ton Google Drive pour l’instant.');
+    body = { sauvegarde: latest.content, nom: latest.name };
+  } else body = await callScript('restaurer', { method: 'GET' }, fetcher);
   if (!body.sauvegarde) throw new SyncError('Ton script Google ne sait pas encore restaurer : mets-le à jour (version 2).');
   let json = JSON.stringify(body.sauvegarde);
   if (isEnvelope(body.sauvegarde)) {
@@ -109,7 +121,7 @@ export async function sendTestNotification(fetcher: typeof fetch = fetch) {
 /** Sauvegarde automatique (silencieuse) si la dernière date de plus de AUTO_BACKUP_HOURS heures. */
 export async function autoBackupIfDue(fetcher: typeof fetch = fetch) {
   const s = (await loadDataset()).settings;
-  if (!s.syncUrl || (s.scriptVersion ?? 1) < 2) return false;
+  if (s.syncMode !== 'google' && (!s.syncUrl || (s.scriptVersion ?? 1) < 2)) return false;
   if (s.driveBackupAt && Date.now() - Date.parse(s.driveBackupAt) < AUTO_BACKUP_HOURS * 3_600_000) return false;
   await driveBackup(fetcher);
   return true;

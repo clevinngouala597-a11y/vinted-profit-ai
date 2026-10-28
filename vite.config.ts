@@ -32,6 +32,7 @@ const CONNECT = [
   "'self'",
   'https://script.google.com', 'https://script.googleusercontent.com', // ton script Google (synchro, sauvegarde)
   'https://ntfy.sh', // notifications
+  'https://gmail.googleapis.com', 'https://www.googleapis.com', 'https://oauth2.googleapis.com', // connexion Google (Gmail, Drive)
   'https://api.anthropic.com', // Annonce IA (avec ta clé)
   'https://cdn.jsdelivr.net', 'https://tessdata.projectnaptha.com', // lecture des tickets (OCR dans le téléphone)
 ];

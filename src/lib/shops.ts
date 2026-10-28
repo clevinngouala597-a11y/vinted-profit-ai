@@ -59,7 +59,9 @@ export async function withShop<T>(shop: string, fn: () => Promise<T>): Promise<T
 
 /** « Bonjour clevinnng, … » → « clevinnng ». */
 export function extractPseudo(text: string): string | null {
-  const m = text.match(/\b(?:Bonjour|Salut|Hello|Coucou)\s+([^\s,!:;]+)\s*[,!]/i);
+  const m = text.match(/\b(?:Bonjour|Salut|Hello|Coucou)\s+([^\s,!:;|]+)\s*[,!]/i)
+    // certains e-mails commencent directement par « pseudo, » (ex. transaction finalisée)
+    ?? text.replace(/^[\s|]+/, '').match(/^([^\s,!:;|]+)\s*,/);
   return m ? m[1] : null;
 }
 

@@ -11,6 +11,7 @@ import { announceSales, previewSound, SOUNDS, type SoundId } from '../lib/saleAl
 import { appsScriptSource, newSecret, newTopic, SCRIPT_VERSION } from '../lib/vinted/appsScript';
 import { driveBackup, driveRestore, PasswordNeeded, removeBackupPassword, rotateScriptKey, sendTestNotification, setBackupPassword } from '../lib/vinted/drive';
 import { MIN_PASSWORD } from '../lib/backupCrypto';
+import { getSession, googleReady, signOut, startGoogleLogin, tokenValid } from '../lib/google/auth';
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
 import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales, type SyncResult } from '../lib/vinted/sync';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, useAction, useUI } from '../ui/kit';
@@ -28,7 +29,10 @@ export function VintedSyncScreen() {
   const ds = useData();
   const ui = useUI();
   const s = ds.settings;
-  const configured = !!(s.syncUrl && s.syncToken);
+  const google = s.syncMode === 'google';
+  const configured = google || !!(s.syncUrl && s.syncToken);
+  // l'installation par script (option avancée) n'apparaît que si elle est déjà utilisée, ou avec #/synchro?avance
+  const advanced = !google && (!!s.syncUrl || location.hash.includes('avance'));
   const [setup, setSetup] = useState(!configured);
   const [url, setUrl] = useState(s.syncUrl);
   const [since, setSince] = useState(s.syncSince ?? s.trackingStart);
@@ -79,8 +83,9 @@ export function VintedSyncScreen() {
 
       {configured && !setup && (
         <>
-          <div className="card">
-            <div className="row-between"><b>Gmail connecté</b><span className="badge green">Active</span></div>
+          {google && <GoogleAccount />}
+          <div className="card" style={google ? { marginTop: 10 } : undefined}>
+            <div className="row-between"><b>{google ? 'Synchro automatique' : 'Gmail connecté'}</b><span className="badge green">Active</span></div>
             <p className="small muted" style={{ margin: '6px 0 0' }}>
               La synchro se fait toute seule à chaque ouverture de l'application.
               {s.lastSyncAt && <> Dernière : {new Date(s.lastSyncAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}.</>}
@@ -94,7 +99,7 @@ export function VintedSyncScreen() {
               </div>
             )}
           </div>
-          {(s.scriptVersion ?? 1) < SCRIPT_VERSION && <ScriptUpdate copy={copyScript} showScript={showScript} />}
+          {!google && (s.scriptVersion ?? 1) < SCRIPT_VERSION && <ScriptUpdate copy={copyScript} showScript={showScript} />}
           <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
             <button className="btn btn-primary" disabled={busy} onClick={() => run(async () => { const r = await syncNow(); setResult(syncSummary(r)); })}>
               {busy ? 'Synchronisation…' : 'Synchroniser maintenant'}
@@ -119,9 +124,9 @@ export function VintedSyncScreen() {
             </button>
           </div>
 
-          {(s.scriptVersion ?? 1) >= 3 && <PushSection />}
-          {(s.scriptVersion ?? 1) >= 3 && <DriveSection />}
-          {(s.scriptVersion ?? 1) >= 3 && <KeySection />}
+          {!google && (s.scriptVersion ?? 1) >= 3 && <PushSection />}
+          {(google || (s.scriptVersion ?? 1) >= 3) && <DriveSection />}
+          {!google && (s.scriptVersion ?? 1) >= 3 && <KeySection />}
 
           {recent && recent.length > 0 && (
             <>
@@ -138,19 +143,21 @@ export function VintedSyncScreen() {
               </div>
             </>
           )}
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }} onClick={() => setSetup(true)}>Revoir l'installation</button>
-          <button className="btn btn-danger btn-sm" style={{ marginTop: 8, marginLeft: 8 }} onClick={async () => {
+          {!google && <button className="btn btn-ghost btn-sm" style={{ marginTop: 14 }} onClick={() => setSetup(true)}>Revoir l'installation</button>}
+          {!google && <button className="btn btn-danger btn-sm" style={{ marginTop: 8, marginLeft: 8 }} onClick={async () => {
             if (await ui.confirm({ title: 'Déconnecter Gmail ?', text: "L'application n'interrogera plus ton script. Les opérations déjà enregistrées sont conservées. Pense aussi à supprimer le déploiement dans Google Apps Script.", confirmLabel: 'Déconnecter', danger: true })) {
               await saveSettings({ syncUrl: '', syncToken: '' });
               setUrl('');
               setSetup(true);
               ui.toast('Gmail déconnecté');
             }
-          }}>Déconnecter</button>
+          }}>Déconnecter</button>}
         </>
       )}
 
-      {setup && (
+      {setup && !advanced && <GoogleConnect since={since} setSince={setSince} />}
+
+      {setup && advanced && (
         <>
           <div className="card small" style={{ marginBottom: 12 }}>
             <b>Comment ça marche</b>
@@ -628,5 +635,81 @@ function KeySection() {
         )}
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Connexion Google (méthode simple, par défaut)
+// ---------------------------------------------------------------------------
+
+function GoogleButton({ onClick, disabled, label }: { onClick: () => void; disabled?: boolean; label: string }) {
+  return (
+    <button className="google-btn" onClick={onClick} disabled={disabled}>
+      <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+function GoogleConnect({ since, setSince }: { since: string; setSince: (v: string) => void }) {
+  const { error, run } = useAction();
+  const ready = googleReady();
+  return (
+    <>
+      <div className="card" style={{ textAlign: 'center', padding: '26px 18px' }}>
+        <div style={{ fontSize: 40 }}>📬</div>
+        <h2 style={{ margin: '8px 0 6px' }}>Connecte ton Gmail</h2>
+        <p className="small muted" style={{ margin: '0 auto 18px', maxWidth: 380 }}>
+          Tes ventes, paiements, expéditions et achats Vinted s'enregistrent tout seuls à partir des e-mails que Vinted t'envoie. Un seul toucher, rien à installer.
+        </p>
+        <ErrorBox error={error} />
+        <GoogleButton disabled={!ready} label={ready ? 'Se connecter avec Google' : 'Bientôt disponible'}
+          onClick={() => run(async () => { await saveSettings({ syncSince: since }); startGoogleLogin(); })} />
+        <ul className="small muted" style={{ textAlign: 'left', margin: '18px auto 0', maxWidth: 380, paddingLeft: 18, display: 'grid', gap: 5 }}>
+          <li><b>Lecture seule</b> : l'appli lit uniquement les e-mails envoyés par Vinted. Elle n'envoie, ne modifie et ne supprime rien.</li>
+          <li>Tout reste sur ton téléphone : aucun serveur ne reçoit tes e-mails.</li>
+          <li>Ton mot de passe Vinted n'est jamais demandé.</li>
+        </ul>
+      </div>
+      <Field label="Importer les e-mails à partir du" hint="Avant cette date, rien n'est importé.">
+        <input type="date" className="input" value={since} max={todayISO()} onChange={(e) => setSince(e.target.value)} />
+      </Field>
+    </>
+  );
+}
+
+/** Compte Google connecté : adresse, état de la connexion, reconnexion, déconnexion. */
+function GoogleAccount() {
+  const s = useData().settings;
+  const ui = useUI();
+  const session = getSession();
+  const live = tokenValid(session);
+  return (
+    <div className="card">
+      <div className="row-between" style={{ alignItems: 'center' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="google-dot">G</span>
+          <span><b>{s.googleEmail ?? 'Compte Google'}</b><br /><span className="small muted">{live ? 'Connecté' : 'Connexion à renouveler'}</span></span>
+        </span>
+        <span className={`badge ${live ? 'green' : 'warn'}`}>{live ? 'Gmail' : 'Expirée'}</span>
+      </div>
+      {!live && (
+        <div style={{ marginTop: 12 }}>
+          <GoogleButton label="Se reconnecter" onClick={() => startGoogleLogin({ hint: s.googleEmail })} />
+        </div>
+      )}
+      <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={async () => {
+        if (await ui.confirm({ title: 'Déconnecter Google ?', text: "L'appli ne lira plus tes e-mails Vinted. Tes ventes déjà enregistrées sont conservées.", confirmLabel: 'Déconnecter', danger: true })) {
+          await signOut();
+          await saveSettings({ syncMode: null, googleEmail: null });
+          ui.toast('Compte Google déconnecté');
+        }
+      }}>Déconnecter</button>
+    </div>
   );
 }

@@ -2,6 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
+import { handleGoogleRedirect } from './lib/google/auth';
+
+// retour de « Se connecter avec Google » : lu avant le routeur, puis l'écran d'avant est remis
+(window as unknown as { __googleRedirect?: unknown }).__googleRedirect = handleGoogleRedirect();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

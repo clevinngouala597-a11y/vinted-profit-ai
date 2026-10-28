@@ -472,3 +472,10 @@ html[data-theme='light'] .beta-badge { color: #fff; }
   /* le menu ☰ fait doublon avec le menu latéral */
   .page-accueil .top .icon-btn[aria-label^='Menu'] { display: none; }
 }
+
+/* ---------- Connexion Google ---------- */
+.google-btn { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; max-width: 360px; padding: 13px 18px; border-radius: 14px;
+  background: #fff; color: #1f1f1f; border: 1px solid #dadce0; font: inherit; font-weight: 700; font-size: 15.5px; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+.google-btn:disabled { opacity: .5; }
+.google-btn:active { transform: scale(0.97); }
+.google-dot { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #4285f4; font-weight: 900; border: 1px solid var(--line); }

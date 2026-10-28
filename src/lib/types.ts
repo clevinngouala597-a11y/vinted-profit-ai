@@ -67,6 +67,9 @@ export interface Settings {
   /** Sauvegardes Drive chiffrées : clé dérivée du mot de passe (reste sur ce téléphone). */
   backupKey: string | null;
   backupSalt: string | null;
+  /** Source de la synchro : connexion Google directe, ou script Google (option avancée). */
+  syncMode: 'google' | 'script' | null;
+  googleEmail: string | null;
   /** Sujet ntfy secret des notifications « appli fermée ». */
   ntfyTopic: string;
   /** Version du script Google installé (renvoyée par le script) ; null = inconnue. */

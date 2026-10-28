@@ -41,7 +41,8 @@ const now = () => new Date().toISOString();
 // Récupération
 // ---------------------------------------------------------------------------
 
-export class SyncError extends Error {}
+import { SyncError } from './errors';
+export { SyncError };
 
 export interface ScriptReply {
   messages: RawEmail[];
@@ -523,17 +524,26 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
   await repairTitles();
   const ds = await loadDataset();
   const { syncUrl, syncToken } = ds.settings;
-  if (!syncUrl || !syncToken) throw new SyncError('La synchronisation Gmail n’est pas encore configurée.');
+  const google = ds.settings.syncMode === 'google';
+  if (!google && (!syncUrl || !syncToken)) throw new SyncError('La synchronisation Gmail n’est pas encore configurée.');
   const since = ds.settings.syncSince ?? ds.settings.trackingStart;
   // Gmail limite le nombre de lectures par jour : après une première lecture complète,
   // seuls les e-mails des derniers jours sont relus (les plus anciens sont déjà enregistrés).
   const incremental = ds.settings.lastSyncAt && ds.settings.syncedFrom === since;
   const from = incremental ? maxDate(since, addDays(ds.settings.lastSyncAt!.slice(0, 10), -INCREMENTAL_DAYS)) : since;
-  const reply = await fetchVintedEmails(syncUrl, syncToken, from, fetcher);
-  if (!incremental) await saveSettings({ syncedFrom: since });
-  const emails = reply.messages;
-  if (reply.version !== ds.settings.scriptVersion || reply.notifications !== ds.settings.scriptNotifications || (reply.topic && reply.topic !== ds.settings.ntfyTopic))
-    await saveSettings({ scriptVersion: reply.version, scriptNotifications: reply.notifications, ...(reply.topic ? { ntfyTopic: reply.topic } : {}) });
+  let emails: RawEmail[];
+  if (google) {
+    // connexion Google : lecture directe de Gmail depuis le téléphone
+    const { fetchGmailVinted } = await import('../google/gmail');
+    emails = await fetchGmailVinted(from, fetcher);
+    if (!incremental) await saveSettings({ syncedFrom: since });
+  } else {
+    const reply = await fetchVintedEmails(syncUrl, syncToken, from, fetcher);
+    if (!incremental) await saveSettings({ syncedFrom: since });
+    emails = reply.messages;
+    if (reply.version !== ds.settings.scriptVersion || reply.notifications !== ds.settings.scriptNotifications || (reply.topic && reply.topic !== ds.settings.ntfyTopic))
+      await saveSettings({ scriptVersion: reply.version, scriptNotifications: reply.notifications, ...(reply.topic ? { ntfyTopic: reply.topic } : {}) });
+  }
   const db = getDb();
   const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
   const added = await ingestEmails(emails.filter((e) => e.date.slice(0, 10) >= since));
