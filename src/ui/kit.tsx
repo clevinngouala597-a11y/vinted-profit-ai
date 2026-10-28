@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { getDb } from '../lib/db';
 import { back } from '../lib/router';
 import { formatEuros, parseEuros, type Cents } from '../lib/money';
@@ -115,7 +116,8 @@ export function Sheet({ open, onClose, title, children, labelledBy }: { open: bo
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // rendu à la racine du document : les cartes en verre et les animations ne déforment pas la feuille
+  return createPortal(
     <>
       <div className="scrim" onClick={onClose} />
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} aria-labelledby={labelledBy} tabIndex={-1} ref={ref}>
@@ -123,7 +125,8 @@ export function Sheet({ open, onClose, title, children, labelledBy }: { open: bo
         {title && <h3>{title}</h3>}
         {children}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
 

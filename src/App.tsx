@@ -30,6 +30,7 @@ import { PhotoPrompts } from './screens/PhotoPrompts';
 import { Messages } from './screens/Messages';
 import { Republish } from './screens/Republish';
 import { MonthCard } from './screens/MonthCard';
+import { PullToRefresh } from './ui/PullToRefresh';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
 import { useUI } from './ui/kit';
@@ -46,6 +47,16 @@ export function App() {
       </UIProvider>
     </DataContext.Provider>
   );
+}
+
+/** Tirer pour actualiser : synchro Vinted si elle est configurée (les nouvelles ventes ont leur bannière). */
+async function refresh(): Promise<string> {
+  const { loadDataset } = await import('./lib/actions');
+  const s = (await loadDataset()).settings;
+  if (!s.syncUrl || !s.syncToken) return 'À jour';
+  if (!navigator.onLine) throw new Error('Pas de connexion internet');
+  const r = await syncNow();
+  return r.newSales.length ? `${r.newSales.length} nouvelle${r.newSales.length > 1 ? 's' : ''} vente${r.newSales.length > 1 ? 's' : ''} !` : `À jour · ${syncSummary(r)}`;
 }
 
 function Shell() {
@@ -96,7 +107,9 @@ function Shell() {
   return (
     <>
       <SaleBanner />
-      <main className="page" key={r0 + (r1 ?? '')}>{screen}</main>
+      <PullToRefresh onRefresh={refresh}>
+        <main className="page" key={r0 + (r1 ?? '')}>{screen}</main>
+      </PullToRefresh>
       <nav className="tabbar" aria-label="Navigation principale">
         <div className="tabbar-inner">
           <TabLink to="" label="Accueil" current={tab === 'home'} icon={<IHome />} />
