@@ -31,6 +31,7 @@ import { Messages } from './screens/Messages';
 import { Republish } from './screens/Republish';
 import { MonthCard } from './screens/MonthCard';
 import { PullToRefresh } from './ui/PullToRefresh';
+import { installPeek, setPrivacy } from './lib/privacy';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
 import { useUI } from './ui/kit';
@@ -61,6 +62,9 @@ async function refresh(): Promise<string> {
 
 function Shell() {
   const [r0, r1] = useRoute();
+  const hide = useData().settings.hideAmounts === true;
+  useEffect(() => setPrivacy(hide), [hide]);
+  useEffect(() => installPeek(), []);
   const [addOpen, setAddOpen] = useState(false);
   useAutoSync();
 

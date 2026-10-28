@@ -66,6 +66,7 @@ export function defaultSettings(today = todayISO()): Settings {
     customSoundId: null,
     autoRecord: true,
     showStock: false,
+    hideAmounts: false,
     ntfyTopic: '',
     scriptVersion: null,
     scriptNotifications: false,

@@ -328,3 +328,9 @@ body::after {
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) { body::before, body::after { animation: none; } }
+
+/* ---------- Mode discret : montants floutés ---------- */
+.privacy .priv { filter: blur(8px); transition: filter 0.3s; -webkit-user-select: none; user-select: none; }
+.privacy .priv.peek { filter: none; }
+.privacy .chart text { filter: blur(4px); }
+.icon-btn[aria-pressed='true'] { color: var(--green); border-color: rgba(99, 247, 123, 0.35); }

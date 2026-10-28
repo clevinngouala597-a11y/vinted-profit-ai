@@ -16,7 +16,8 @@ import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { labelList, labelsToPrint } from '../lib/vinted/labels';
 import { TrendChart } from '../ui/TrendChart';
-import { IChart as IChartBar, ITag, IBell, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
+import { IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
+import { saveSettings } from '../lib/actions';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
 import { NotifRow, useNotifications } from './Notifications';
@@ -53,6 +54,10 @@ export function Home() {
           <div className="sub">{formatRange(p.range)}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="icon-btn" aria-pressed={ds.settings.hideAmounts === true} aria-label={ds.settings.hideAmounts ? 'Afficher les montants' : 'Cacher les montants'}
+            onClick={() => saveSettings({ hideAmounts: !ds.settings.hideAmounts })}>
+            {ds.settings.hideAmounts ? <IEyeOff /> : <IEye />}
+          </button>
           <button className="icon-btn" style={{ position: 'relative' }} aria-label={`Notifications${notifs.visible.length ? ` : ${notifs.visible.length} à traiter` : ''}`} onClick={() => go('notifications')}>
             <IBell />
             {notifs.visible.length > 0 && <span className="count-badge">{notifs.visible.length}</span>}

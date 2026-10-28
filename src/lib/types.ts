@@ -46,6 +46,8 @@ export interface Settings {
   autoRecord: boolean;
   /** Afficher la gestion du stock (onglet, tuiles, alertes). Masquée par défaut : la synchro s'en occupe. */
   showStock: boolean;
+  /** Mode discret : montants floutés à l'écran. */
+  hideAmounts: boolean;
   /** Sujet ntfy secret des notifications « appli fermée ». */
   ntfyTopic: string;
   /** Version du script Google installé (renvoyée par le script) ; null = inconnue. */
