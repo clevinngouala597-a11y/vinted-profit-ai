@@ -674,6 +674,7 @@ function GoogleConnect({ since, setSince }: { since: string; setSince: (v: strin
           <li><b>Lecture seule</b> : l'appli lit uniquement les e-mails envoyés par Vinted. Elle n'envoie, ne modifie et ne supprime rien.</li>
           <li>Tout reste sur ton téléphone : aucun serveur ne reçoit tes e-mails.</li>
           <li>Ton mot de passe Vinted n'est jamais demandé.</li>
+          <li><a href={`${import.meta.env.BASE_URL}confidentialite.html`} target="_blank" rel="noopener">Règles de confidentialité</a></li>
         </ul>
       </div>
       <Field label="Importer les e-mails à partir du" hint="Avant cette date, rien n'est importé.">
