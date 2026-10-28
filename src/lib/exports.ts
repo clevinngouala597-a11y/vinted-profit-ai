@@ -302,18 +302,19 @@ export function downloadBlob(filename: string, blob: Blob) {
 
 const BACKUP_FORMAT = 'vinted-profit-ai/backup';
 
-const blobToDataURL = (b: Blob) =>
-  new Promise<string>((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result));
-    r.onerror = () => rej(r.error);
-    r.readAsDataURL(b);
-  });
+async function blobToDataURL(b: Blob): Promise<string> {
+  const u = new Uint8Array(await b.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  return `data:${b.type || 'application/octet-stream'};base64,${btoa(bin)}`;
+}
 
 export async function createBackup(includePhotos: boolean): Promise<Blob> {
   const db = getDb();
   const data: Record<string, unknown> = {};
   for (const t of DATA_TABLES) data[t] = await db.table(t).toArray();
+  // la clé des sauvegardes chiffrées reste sur ce téléphone
+  data.settings = (data.settings as Record<string, unknown>[]).map(({ backupKey: _k, ...rest }) => rest);
   if (includePhotos) {
     const atts = await db.attachments.toArray();
     data.attachments = await Promise.all(atts.map(async (a) => ({ id: a.id, mime: a.mime, createdAt: a.createdAt, data: await blobToDataURL(a.blob) })));
@@ -321,6 +322,17 @@ export async function createBackup(includePhotos: boolean): Promise<Blob> {
   return new Blob([JSON.stringify({ format: BACKUP_FORMAT, version: 2, createdAt: new Date().toISOString(), data })], {
     type: 'application/json',
   });
+}
+
+/** data:…;base64,… → Blob, sans requête réseau (compatible avec la liste blanche des sites). */
+function dataUrlToBlob(url: string): Blob {
+  const m = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(url);
+  if (!m) throw new Error('Photo illisible dans la sauvegarde.');
+  if (!m[2]) return new Blob([decodeURIComponent(m[3])], { type: m[1] });
+  const bin = atob(m[3]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: m[1] });
 }
 
 export async function restoreBackup(file: Blob): Promise<{ items: number; sales: number }> {
@@ -334,10 +346,12 @@ export async function restoreBackup(file: Blob): Promise<{ items: number; sales:
   const data = parsed.data;
   for (const t of DATA_TABLES) if (data[t] !== undefined && !Array.isArray(data[t])) throw new Error(`Sauvegarde invalide (${t}).`);
   const db = getDb();
+  // ce que ce téléphone garde : sa connexion au script Google et sa clé de sauvegarde
+  const here = await db.settings.get('main');
   const atts = Array.isArray(data.attachments)
     ? await Promise.all(
         (data.attachments as { id: string; mime: string; createdAt: string; data: string }[]).map(async (a) => ({
-          id: a.id, mime: a.mime, createdAt: a.createdAt, blob: await (await fetch(a.data)).blob(),
+          id: a.id, mime: a.mime, createdAt: a.createdAt, blob: dataUrlToBlob(a.data),
         })),
       )
     : null;
@@ -349,6 +363,12 @@ export async function restoreBackup(file: Blob): Promise<{ items: number; sales:
     if (atts) {
       await db.attachments.clear();
       await db.attachments.bulkAdd(atts);
+    }
+    const restored = await db.settings.get('main');
+    if (restored && here) {
+      const keep: Partial<typeof here> = { backupKey: here.backupKey ?? null, backupSalt: here.backupSalt ?? restored.backupSalt ?? null };
+      if (here.syncUrl && here.syncToken) Object.assign(keep, { syncUrl: here.syncUrl, syncToken: here.syncToken, scriptVersion: here.scriptVersion });
+      await db.settings.put({ ...restored, ...keep });
     }
   });
   return { items: (data.items ?? []).length, sales: (data.sales ?? []).length };

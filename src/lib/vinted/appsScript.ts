@@ -4,9 +4,10 @@
  *  - il renvoie à l'application les e-mails Vinted utiles (uniquement avec la clé secrète) ;
  *  - il range les sauvegardes de l'application dans son Google Drive (version 2) ;
  *  - il vérifie Gmail toutes les 5 minutes et envoie une notification à chaque vente, même appli fermée,
- *    via l'appli ntfy et un sujet secret (version 2).
+ *    via l'appli ntfy et un sujet secret (version 2) ;
+ *  - sa clé secrète peut être changée depuis l'application, sans recopier le script (version 4).
  */
-export const SCRIPT_VERSION = 3;
+export const SCRIPT_VERSION = 4;
 
 export function newSecret(): string {
   const bytes = new Uint8Array(24);
@@ -26,15 +27,22 @@ export function appsScriptSource(secret: string, topic: string): string {
 //  - range les sauvegardes de l'application dans ton Google Drive (dossier « CNG Vinted - sauvegardes ») ;
 //  - te prévient à chaque vente, même appli fermée (appli ntfy, sujet secret ci-dessous).
 // Il ne répond qu'à l'application qui connaît la clé ci-dessous. Ne partage ni la clé ni le sujet.
+// (Si tu changes la clé depuis l'application, la nouvelle est gardée dans les propriétés du script.)
 const CLE = '${secret}';
 const SUJET = '${topic}';
 const VERSION = ${SCRIPT_VERSION};
 const DOSSIER = 'CNG Vinted - sauvegardes';
 const RECHERCHE = 'from:(vinted.fr OR vinted.com) subject:(vendu OR finalisée OR "mise à jour" OR facture OR reçu OR remboursée OR bordereau)';
 
+// Clé en vigueur : celle choisie depuis l'application si elle a été changée, sinon celle du script.
+function cle() {
+  return PropertiesService.getScriptProperties().getProperty('CLE') || CLE;
+}
+
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (p.token !== CLE) return reponse({ error: 'unauthorized' });
+  if (p.token !== cle()) return reponse({ error: 'unauthorized' });
+  if (p.action === 'ping') return reponse({ version: VERSION, ok: true });
   if (p.action === 'restaurer') return reponse(derniereSauvegarde());
   if (p.action === 'bordereaux') return reponse({ version: VERSION, bordereaux: bordereaux(String(p.ids || '').split(',').slice(0, 30)) });
   if (p.action === 'test') {
@@ -54,7 +62,14 @@ function doGet(e) {
 // Sauvegarde envoyée par l'application : un fichier par jour, les 30 derniers sont gardés.
 function doPost(e) {
   const p = (e && e.parameter) || {};
-  if (p.token !== CLE) return reponse({ error: 'unauthorized' });
+  if (p.token !== cle()) return reponse({ error: 'unauthorized' });
+  if (p.action === 'changer_cle') {
+    // nouvelle clé envoyée par l'application (dans le corps, jamais dans l'adresse)
+    const nouvelle = String((e.postData && e.postData.contents) || '');
+    if (!/^[A-Za-z0-9_-]{24,64}$/.test(nouvelle)) return reponse({ error: 'clé invalide' });
+    PropertiesService.getScriptProperties().setProperty('CLE', nouvelle);
+    return reponse({ version: VERSION, ok: true });
+  }
   if (p.action !== 'sauvegarder') return reponse({ error: 'action inconnue' });
   const contenu = e.postData && e.postData.contents;
   if (!contenu || contenu.charAt(0) !== '{') return reponse({ error: 'sauvegarde vide' });

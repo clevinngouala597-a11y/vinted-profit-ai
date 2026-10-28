@@ -9,7 +9,8 @@ import { useData } from '../lib/useData';
 import { DEFAULT_CATEGORIES, SELLABLE, type SyncedEmail } from '../lib/types';
 import { announceSales, previewSound, SOUNDS, type SoundId } from '../lib/saleAlert';
 import { appsScriptSource, newSecret, newTopic, SCRIPT_VERSION } from '../lib/vinted/appsScript';
-import { driveBackup, driveRestore, sendTestNotification } from '../lib/vinted/drive';
+import { driveBackup, driveRestore, PasswordNeeded, removeBackupPassword, rotateScriptKey, sendTestNotification, setBackupPassword } from '../lib/vinted/drive';
+import { MIN_PASSWORD } from '../lib/backupCrypto';
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
 import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales, type SyncResult } from '../lib/vinted/sync';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, useAction, useUI } from '../ui/kit';
@@ -118,8 +119,9 @@ export function VintedSyncScreen() {
             </button>
           </div>
 
-          {(s.scriptVersion ?? 1) >= SCRIPT_VERSION && <PushSection />}
-          {(s.scriptVersion ?? 1) >= SCRIPT_VERSION && <DriveSection />}
+          {(s.scriptVersion ?? 1) >= 3 && <PushSection />}
+          {(s.scriptVersion ?? 1) >= 3 && <DriveSection />}
+          {(s.scriptVersion ?? 1) >= 3 && <KeySection />}
 
           {recent && recent.length > 0 && (
             <>
@@ -258,6 +260,28 @@ function DriveSection() {
   const ui = useUI();
   const { error, run, busy } = useAction();
   const last = s.driveBackupAt ? new Date(s.driveBackupAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : null;
+  const [askPw, setAskPw] = useState(false);
+  const [restorePw, setRestorePw] = useState('');
+  const [encStep, setEncStep] = useState(false);
+  const [pw1, setPw1] = useState('');
+  const [pw2, setPw2] = useState('');
+  const encrypted = !!s.backupKey;
+  const restore = (pw?: string) => run(async () => {
+    try {
+      const r = await driveRestore(fetch, pw);
+      setAskPw(false); setRestorePw('');
+      ui.toast(`Restauré : ${r.sales} ventes, ${r.items} articles`);
+    } catch (e) {
+      if (e instanceof PasswordNeeded) { setAskPw(true); return; }
+      throw e;
+    }
+  });
+  const saveEnc = () => run(async () => {
+    if (pw1 !== pw2) throw new Error('Les deux mots de passe ne sont pas identiques.');
+    await setBackupPassword(pw1);
+    setPw1(''); setPw2(''); setEncStep(false);
+    ui.toast('Sauvegardes chiffrées : une première sauvegarde chiffrée est faite');
+  });
   return (
     <>
       <h2>Sauvegarde Google Drive</h2>
@@ -279,9 +303,46 @@ function DriveSection() {
               text: 'Toutes les données de l’appli sur ce téléphone sont remplacées par la dernière sauvegarde de ton Drive. À utiliser sur un nouveau téléphone ou après une perte de données.',
               confirmLabel: 'Restaurer', danger: true,
             });
-            if (ok) run(async () => { const r = await driveRestore(); ui.toast(`Restauré : ${r.sales} ventes, ${r.items} articles`); });
+            if (ok) restore();
           }}>Restaurer</button>
         </div>
+        {askPw && (
+          <div style={{ marginTop: 12 }}>
+            <Field label="Mot de passe de sauvegarde" hint="Cette sauvegarde est chiffrée.">
+              <input className="input" type="password" value={restorePw} onChange={(e) => setRestorePw(e.target.value)} autoComplete="current-password" />
+            </Field>
+            <button className="btn btn-primary btn-sm" disabled={busy || !restorePw} onClick={() => restore(restorePw)}>Ouvrir et restaurer</button>
+          </div>
+        )}
+
+        <div className="row-between" style={{ marginTop: 16, alignItems: 'center' }}>
+          <b>🔐 Chiffrement</b>
+          <span className={`badge ${encrypted ? 'green' : 'warn'}`}>{encrypted ? 'Activé' : 'Désactivé'}</span>
+        </div>
+        <p className="small muted" style={{ margin: '6px 0 10px' }}>
+          {encrypted
+            ? 'Tes sauvegardes sont chiffrées avec ton mot de passe : sans lui, personne ne peut les lire, même avec accès à ton Drive.'
+            : 'Protège tes sauvegardes avec un mot de passe : sans lui, le fichier dans ton Drive est illisible.'}
+        </p>
+        {encStep ? (
+          <>
+            <Field label={`Mot de passe de sauvegarde (${MIN_PASSWORD} caractères minimum)`}><input className="input" type="password" value={pw1} onChange={(e) => setPw1(e.target.value)} autoComplete="new-password" /></Field>
+            <Field label="Confirme le mot de passe"><input className="input" type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" /></Field>
+            <p className="tiny warn" style={{ marginTop: 0 }}>⚠️ Note-le bien (par exemple dans les mots de passe de ton iPhone) : s'il est perdu, les sauvegardes chiffrées ne peuvent plus être ouvertes. Personne ne peut le retrouver.</p>
+            <div className="btn-row">
+              <button className="btn btn-primary btn-sm" disabled={busy || pw1.length < MIN_PASSWORD} onClick={saveEnc}>{busy ? 'Chiffrement…' : 'Chiffrer mes sauvegardes'}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setEncStep(false); setPw1(''); setPw2(''); }}>Annuler</button>
+            </div>
+          </>
+        ) : (
+          <div className="btn-row">
+            <button className="btn btn-ghost btn-sm" onClick={() => setEncStep(true)}>{encrypted ? 'Changer le mot de passe' : 'Chiffrer avec un mot de passe'}</button>
+            {encrypted && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={async () => {
+              if (await ui.confirm({ title: 'Ne plus chiffrer ?', text: 'Les prochaines sauvegardes seront lisibles par toute personne ayant accès à ton Drive.', confirmLabel: 'Arrêter le chiffrement', danger: true }))
+                run(async () => { await removeBackupPassword(); ui.toast('Chiffrement désactivé'); });
+            }}>Désactiver</button>}
+          </div>
+        )}
       </div>
     </>
   );
@@ -539,5 +600,33 @@ function SoundPicker() {
       <p className="tiny faint" style={{ margin: '6px 0 0' }}>MP3, M4A ou WAV de quelques secondes (2 Mo max), par exemple un son enregistré avec ton téléphone. Les notifications appli fermée (ntfy) gardent le son de l'iPhone.</p>
       <ErrorBox error={error} />
     </div>
+  );
+}
+
+/** Clé secrète du script : la changer si elle a pu être vue (capture d'écran, téléphone prêté…). */
+function KeySection() {
+  const s = useData().settings;
+  const ui = useUI();
+  const { error, run, busy } = useAction();
+  const ready = (s.scriptVersion ?? 1) >= 4;
+  return (
+    <>
+      <h2>Sécurité du script</h2>
+      <div className="card">
+        <b>🔑 Clé secrète</b>
+        <p className="small muted" style={{ margin: '6px 0 10px' }}>
+          Ton script Google ne répond qu'à l'appli qui connaît sa clé secrète. Si quelqu'un a pu la voir (capture de cet écran, téléphone prêté…), change-la : l'ancienne ne marchera plus du tout.
+        </p>
+        <ErrorBox error={error} />
+        {ready ? (
+          <button className="btn btn-ghost btn-sm" disabled={busy} onClick={async () => {
+            if (await ui.confirm({ title: 'Changer la clé secrète ?', text: "Une nouvelle clé est créée et envoyée à ton script. Rien d'autre à faire : la synchro continue normalement.", confirmLabel: 'Changer la clé' }))
+              run(async () => { await rotateScriptKey(); ui.toast('Nouvelle clé en place : l’ancienne ne fonctionne plus'); });
+          }}>{busy ? 'Changement…' : 'Changer la clé secrète'}</button>
+        ) : (
+          <p className="small warn" style={{ margin: 0 }}>Mets d'abord ton script à jour (carte « Mettre à jour le script » plus haut) pour pouvoir changer la clé.</p>
+        )}
+      </div>
+    </>
   );
 }

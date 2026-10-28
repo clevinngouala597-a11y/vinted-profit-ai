@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { VPDatabase, setDb } from '../src/lib/db';
 import { defaultSettings, loadDataset, saveSettings } from '../src/lib/actions';
 import { appsScriptSource, newTopic } from '../src/lib/vinted/appsScript';
-import { autoBackupIfDue, driveBackup, driveRestore, sendTestNotification } from '../src/lib/vinted/drive';
+import { autoBackupIfDue, driveBackup, driveRestore, PasswordNeeded, rotateScriptKey, sendTestNotification, setBackupPassword } from '../src/lib/vinted/drive';
+import { addItemPhotos, recordPurchase } from '../src/lib/actions';
 import { syncNow } from '../src/lib/vinted/sync';
 import { buildLabelsPdf } from '../src/lib/vinted/labels';
 import { PDFDocument } from 'pdf-lib';
@@ -106,7 +107,7 @@ describe('Script Google (exécuté pour de vrai)', () => {
     const r = await syncNow(g.fetcher, '2026-10-27');
     expect(r.applied).toBe(1);
     let s = (await loadDataset()).settings;
-    expect([s.scriptVersion, s.scriptNotifications]).toEqual([3, false]);
+    expect([s.scriptVersion, s.scriptNotifications]).toEqual([4, false]);
     expect(s.ntfyTopic).toBe('cng-vinted-sujet'); // le sujet du script fait foi
 
     expect(await autoBackupIfDue(g.fetcher)).toBe(true);
@@ -129,6 +130,60 @@ describe('Script Google (exécuté pour de vrai)', () => {
     await saveSettings({ syncToken: 'mauvaise-cle' });
     await expect(driveBackup(g.fetcher)).rejects.toThrow(/Clé secrète refusée/);
     s = (await loadDataset()).settings;
+  });
+
+  it('clé secrète : changée depuis l’appli, l’ancienne ne marche plus, la synchro continue', async () => {
+    const g = googleEnv(SECRET, 'cng-vinted-sujet');
+    g.mails.push({ id: 'v1', date: new Date('2026-10-22T09:10:49Z'), subject: "Ton article s'est vendu !", body: 'Bonjour clevinnng, mickelyn a acheté Robe longue rose - Taille S 80,00 € Nous transférerons' });
+    await syncNow(g.fetcher, '2026-10-27'); // le script répond en version 4
+    await rotateScriptKey(g.fetcher);
+    const fresh = (await loadDataset()).settings.syncToken!;
+    expect(fresh).not.toBe(SECRET);
+    expect(fresh.length).toBeGreaterThanOrEqual(24);
+    expect(g.props.get('CLE')).toBe(fresh); // gardée dans les propriétés du script
+    // l'ancienne clé est refusée par le script
+    expect(JSON.parse(g.api.doGet({ parameter: { token: SECRET, action: 'ping' } }))).toEqual({ error: 'unauthorized' });
+    // la nouvelle fonctionne pour tout
+    expect(JSON.parse(g.api.doGet({ parameter: { token: fresh, action: 'ping' } })).ok).toBe(true);
+    await expect(syncNow(g.fetcher, '2026-10-28')).resolves.toBeTruthy();
+    // une clé mal formée est refusée
+    expect(JSON.parse(g.api.doPost({ parameter: { token: fresh, action: 'changer_cle' }, postData: { contents: 'court' } }))).toEqual({ error: 'clé invalide' });
+  });
+
+  it('sauvegardes chiffrées : illisibles sans le mot de passe, restaurées avec, photos comprises', async () => {
+    const g = googleEnv(SECRET, 'cng-vinted-sujet');
+    await syncNow(g.fetcher, '2026-10-27');
+    const { itemIds } = await recordPurchase({ date: '2026-10-05', source: 'Friperie', commonFees: 0, lotPrice: null, lines: [{ name: 'Veste secrète', category: 'Vestes et manteaux', price: 1800, targetPrice: 5500 }] });
+    await addItemPhotos(itemIds[0], [new Blob([new Uint8Array([1, 2, 3, 250])], { type: 'image/jpeg' })]);
+    await expect(setBackupPassword('court')).rejects.toThrow(/au moins 8/);
+    await setBackupPassword('mon-mot-de-passe', g.fetcher);
+    const file = g.folders[0].files.filter((f) => !f.trashed).at(-1)!;
+    expect(file.content).not.toContain('Veste secrète');
+    expect(file.content).not.toContain(SECRET);
+    expect(JSON.parse(file.content).format).toBe('cng-vinted/chiffre-v1');
+    // ce téléphone ouvre ses propres sauvegardes sans redemander le mot de passe
+    const same = await driveRestore(g.fetcher);
+    expect(same.items).toBe(1);
+
+    // nouveau téléphone : le mot de passe est demandé
+    setDb(new VPDatabase(`gas-neuf-${n}`));
+    await saveSettings({ ...defaultSettings('2026-10-01'), onboarded: true, syncUrl: 'https://script.google.com/macros/s/abc/exec', syncToken: SECRET });
+    await expect(driveRestore(g.fetcher)).rejects.toBeInstanceOf(PasswordNeeded);
+    await expect(driveRestore(g.fetcher, 'mauvais-mot-de-passe')).rejects.toThrow(/Mot de passe incorrect/);
+    const back = await driveRestore(g.fetcher, 'mon-mot-de-passe');
+    expect(back.items).toBe(1);
+    const ds = await loadDataset();
+    expect(ds.items[0].name).toBe('Veste secrète');
+    expect(ds.settings.backupKey).toBeTruthy(); // les prochaines sauvegardes restent chiffrées
+    expect(ds.settings.syncToken).toBe(SECRET); // la connexion de ce téléphone est gardée
+    const { getDb } = await import('../src/lib/db');
+    const photo = await getDb().attachments.toArray();
+    expect(photo).toHaveLength(1);
+    expect([...new Uint8Array(await photo[0].blob.arrayBuffer())]).toEqual([1, 2, 3, 250]);
+    // la clé de chiffrement n'est jamais copiée dans une sauvegarde
+    await driveBackup(g.fetcher);
+    const { createBackup } = await import('../src/lib/exports');
+    expect(await (await createBackup(false)).text()).not.toContain(ds.settings.backupKey!);
   });
 
   it('notification de test depuis l’application', async () => {

@@ -77,6 +77,8 @@ export function defaultSettings(today = todayISO()): Settings {
     lockDelay: 1,
     shops: [],
     activeShop: 'all',
+    backupKey: null,
+    backupSalt: null,
     ntfyTopic: '',
     scriptVersion: null,
     scriptNotifications: false,
@@ -146,7 +148,7 @@ export async function saveSettings(patch: Partial<Settings>) {
   const next = { ...cur, ...patch, id: 'main' as const };
   await db.settings.put(next);
   // la clé secrète de synchronisation n'apparaît jamais dans le journal
-  const { syncToken: _hidden, anthropicKey: _key, lockPin: _pin, lockCredential: _cred, ...visible } = patch;
+  const { syncToken: _hidden, anthropicKey: _key, lockPin: _pin, lockCredential: _cred, backupKey: _bk, ...visible } = patch;
   await audit('settings', 'main', 'modification', JSON.stringify({ ...visible, ...(_hidden !== undefined ? { syncToken: '••••' } : {}), ...(_key !== undefined ? { anthropicKey: '••••' } : {}), ...(_pin !== undefined ? { lockPin: '••••' } : {}) }));
   return next;
 }

@@ -369,6 +369,7 @@ describe('Script Google', () => {
     });
     const sandbox = {
       GmailApp: { search: (q: string) => { queries.push(q); return [{ getMessages: () => [msg('m1', "Ton article s'est vendu !")] }]; } },
+      PropertiesService: { getScriptProperties: () => ({ getProperty: () => null, setProperty: () => undefined }) },
       ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s: string) => ({ setMimeType: () => s }) },
       ScriptApp: { getProjectTriggers: () => [] },
     };

@@ -64,6 +64,9 @@ export interface Settings {
   shops: { id: string; name: string; pseudo: string }[];
   /** Dressing affiché : « all » ou l'identifiant d'un dressing. */
   activeShop: string;
+  /** Sauvegardes Drive chiffrées : clé dérivée du mot de passe (reste sur ce téléphone). */
+  backupKey: string | null;
+  backupSalt: string | null;
   /** Sujet ntfy secret des notifications « appli fermée ». */
   ntfyTopic: string;
   /** Version du script Google installé (renvoyée par le script) ; null = inconnue. */

@@ -6,6 +6,8 @@
 import { loadDataset, saveSettings } from '../actions';
 import { createBackup, restoreBackup } from '../exports';
 import { SyncError } from './sync';
+import { decryptText, deriveKey, encryptText, isEnvelope, MIN_PASSWORD, newSalt } from '../backupCrypto';
+import { newSecret } from './appsScript';
 
 /** Fréquence des sauvegardes automatiques. */
 export const AUTO_BACKUP_HOURS = 12;
@@ -33,7 +35,10 @@ export async function callScript(action: string, init: RequestInit, fetcher: typ
 }
 
 export async function driveBackup(fetcher: typeof fetch = fetch): Promise<string> {
-  const text = await (await createBackup(true)).text();
+  const s = (await loadDataset()).settings;
+  const plain = await (await createBackup(true)).text();
+  // chiffrée avec le mot de passe de sauvegarde, s'il y en a un
+  const text = s.backupKey && s.backupSalt ? JSON.stringify(await encryptText(plain, s.backupKey, s.backupSalt)) : plain;
   // text/plain : pas de requête préalable du navigateur, accepté par Google Apps Script
   const body = await callScript('sauvegarder', { method: 'POST', body: text, headers: { 'Content-Type': 'text/plain;charset=utf-8' } }, fetcher);
   if (!body.ok) throw new SyncError('Ton script Google ne sait pas encore sauvegarder : mets-le à jour (version 2).');
@@ -41,12 +46,57 @@ export async function driveBackup(fetcher: typeof fetch = fetch): Promise<string
   return String(body.nom ?? '');
 }
 
+export class PasswordNeeded extends Error {
+  constructor() { super('Cette sauvegarde est chiffrée : entre ton mot de passe de sauvegarde.'); }
+}
+
 /** Remplace toutes les données de l'application par la dernière sauvegarde du Drive. */
-export async function driveRestore(fetcher: typeof fetch = fetch) {
+export async function driveRestore(fetcher: typeof fetch = fetch, password?: string) {
   const body = await callScript('restaurer', { method: 'GET' }, fetcher);
   if (!body.sauvegarde) throw new SyncError('Ton script Google ne sait pas encore restaurer : mets-le à jour (version 2).');
-  const r = await restoreBackup(new Blob([JSON.stringify(body.sauvegarde)], { type: 'application/json' }));
+  let json = JSON.stringify(body.sauvegarde);
+  if (isEnvelope(body.sauvegarde)) {
+    const env = body.sauvegarde;
+    const s = (await loadDataset()).settings;
+    // même mot de passe que sur ce téléphone : pas besoin de le redemander
+    const key = password ? await deriveKey(password, env.sel) : s.backupKey && s.backupSalt === env.sel ? s.backupKey : null;
+    if (!key) throw new PasswordNeeded();
+    json = await decryptText(env, key);
+    const r = await restoreBackup(new Blob([json], { type: 'application/json' }));
+    // ce téléphone continue de chiffrer avec le même mot de passe
+    await saveSettings({ backupKey: key, backupSalt: env.sel });
+    return { ...r, name: String(body.nom ?? '') };
+  }
+  const r = await restoreBackup(new Blob([json], { type: 'application/json' }));
   return { ...r, name: String(body.nom ?? '') };
+}
+
+/** Active (ou change) le chiffrement des sauvegardes, puis sauvegarde tout de suite. */
+export async function setBackupPassword(password: string, fetcher: typeof fetch = fetch) {
+  if (password.length < MIN_PASSWORD) throw new Error(`Le mot de passe doit faire au moins ${MIN_PASSWORD} caractères.`);
+  const salt = newSalt();
+  await saveSettings({ backupKey: await deriveKey(password, salt), backupSalt: salt });
+  return driveBackup(fetcher);
+}
+
+export async function removeBackupPassword(fetcher: typeof fetch = fetch) {
+  await saveSettings({ backupKey: null, backupSalt: null });
+  return driveBackup(fetcher);
+}
+
+/**
+ * Change la clé secrète du script Google (version 4) : la nouvelle clé est envoyée au script avec
+ * l'ancienne, vérifiée, puis enregistrée ici. L'ancienne clé ne fonctionne plus.
+ */
+export async function rotateScriptKey(fetcher: typeof fetch = fetch) {
+  const s = (await loadDataset()).settings;
+  if ((s.scriptVersion ?? 1) < 4) throw new SyncError('Mets d’abord ton script Google à jour (version 4).');
+  const fresh = newSecret();
+  const body = await callScript('changer_cle', { method: 'POST', body: fresh, headers: { 'Content-Type': 'text/plain;charset=utf-8' } }, fetcher);
+  if (!body.ok) throw new SyncError('Le script n’a pas accepté la nouvelle clé.');
+  // le script a déjà la nouvelle clé : on l'enregistre ici, puis on vérifie qu'elle répond
+  await saveSettings({ syncToken: fresh });
+  await callScript('ping', { method: 'GET' }, fetcher);
 }
 
 export async function sendTestNotification(fetcher: typeof fetch = fetch) {

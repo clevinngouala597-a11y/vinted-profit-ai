@@ -23,6 +23,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Failles connues dans les librairies
+        run: npm audit --omit=dev --audit-level=high
       - name: Tests (moteur financier, exports, import, fiscalité, OCR)
         run: npm test
       - name: Build
