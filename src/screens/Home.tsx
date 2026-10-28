@@ -18,7 +18,7 @@ import { labelList, labelsToPrint } from '../lib/vinted/labels';
 import { TrendChart } from '../ui/TrendChart';
 import { IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { saveSettings } from '../lib/actions';
-import { BETA } from '../lib/beta';
+import { BETA, isLocked } from '../lib/beta';
 import { leaveDemo } from '../lib/demo';
 import { useUI } from '../ui/kit';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
@@ -221,10 +221,11 @@ function Tile({ k, label, value, note, onClick, tone = '' }: { k: string; label:
 }
 
 function MenuLink({ icon, title, sub, to, close }: { icon: React.ReactNode; title: string; sub: string; to: string; close: () => void }) {
+  const locked = isLocked(to);
   return (
-    <button className="menu-item" onClick={() => { close(); go(to); }}>
+    <button className={`menu-item${locked ? ' locked' : ''}`} onClick={() => { close(); go(to); }}>
       <span className="dot out">{icon}</span>
-      <span style={{ flex: 1 }}><div className="mi-title">{title}</div><div className="mi-sub">{sub}</div></span>
+      <span style={{ flex: 1 }}><div className="mi-title">{title}{locked && ' 🔒'}</div><div className="mi-sub">{locked ? 'Version complète' : sub}</div></span>
       <IChevron className="faint" />
     </button>
   );

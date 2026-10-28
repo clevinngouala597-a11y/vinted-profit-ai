@@ -2,9 +2,9 @@
  * Données d'exemple (version bêta) : de quoi voir toute l'appli remplie en un toucher.
  * Les dates sont calculées à partir d'aujourd'hui, pour que l'exemple tombe toujours sur
  * le mois en cours et le mois précédent. Tout s'efface avec « Commencer avec mes données ».
+ * Pas de synchro Gmail dans l'exemple : ces fonctions sont réservées à la version complète.
  */
-import { AUTO_ITEM_SOURCE, changeSaleStatus, defaultSettings, recordExpense, recordPurchase, recordSale, saveGoal, saveSettings, wipeAllData } from './actions';
-import { getDb } from './db';
+import { changeSaleStatus, defaultSettings, recordExpense, recordPurchase, recordSale, saveGoal, saveSettings, wipeAllData } from './actions';
 import type { ISODate } from './types';
 
 type Line = [name: string, category: string, brand: string, size: string, cost: number, price: number];
@@ -26,7 +26,7 @@ const shift = (d: ISODate, n: number): ISODate => new Date(Date.parse(`${d}T12:0
 /** Remplit l'appli avec un exemple réaliste (≈ 2 mois de ventes). */
 export async function loadDemoData(today: ISODate) {
   await wipeAllData();
-  await saveSettings({ ...defaultSettings(), onboarded: true, demoData: true, initialCash: 20000, monthlyProfitGoal: 50000, minProfitPerItem: 500, trackingStart: shift(today, -90) });
+  await saveSettings({ ...defaultSettings(), onboarded: true, demoData: true, showStock: true, initialCash: 20000, monthlyProfitGoal: 50000, minProfitPerItem: 500, trackingStart: shift(today, -90) });
   // une vente presque chaque jour sur les 55 derniers jours, un peu plus souvent récemment
   const ago = [54, 51, 49, 46, 43, 41, 38, 35, 33, 30, 28, 26, 24, 22, 20, 18, 16, 15, 13, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 0];
   for (const [k, n] of ago.entries()) {
@@ -42,11 +42,6 @@ export async function loadDemoData(today: ISODate) {
   // articles en vente qui ne bougent pas (« À republier »)
   for (const [name, category, brand, size, cost, price] of [['Bomber Alpha Industries', 'Vestes et manteaux', 'Alpha Industries', 'L', 2000, 5500], ['Sweat Tommy Jeans', 'Sweats et pulls', 'Tommy Hilfiger', 'M', 700, 2600], ['Short Nike vintage', 'Shorts', 'Nike', 'M', 400, 1600]] as Line[])
     await recordPurchase({ date: shift(today, -23), source: 'Friperie', commonFees: 0, lotPrice: null, lines: [{ name, category, brand, size, price: cost, targetPrice: price, status: 'en_vente' }] });
-  // ventes reçues par la synchro sans prix d'achat connu
-  for (const [name, category, price, n] of [['Sweat Ralph Lauren bleu', 'Sweats et pulls', 3200, 1], ['Casquette Nike vintage', 'Accessoires', 1500, 2]] as const) {
-    const { itemIds } = await recordPurchase({ date: shift(today, -n), source: AUTO_ITEM_SOURCE, commonFees: 0, lotPrice: null, lines: [{ name, category, price: 0, targetPrice: null, status: 'en_vente', costPending: true }] });
-    await recordSale({ date: shift(today, -n), itemIds, listedPrice: price, discount: 0, sellerRevenue: price, platformFees: 0, packagingCost: 0, otherCosts: 0, paymentStatus: 'en_attente' });
-  }
   const exp = (n: number, amount: number, category: string, supplier: string, description: string) =>
     recordExpense({ date: shift(today, -n), amount, category, supplier, description, saleId: null, attachmentId: null });
   await exp(25, 1290, 'Emballages', 'Action', "Sacs d'envoi");
@@ -54,17 +49,6 @@ export async function loadDemoData(today: ISODate) {
   await exp(8, 500, 'Nettoyage et entretien', '', 'Lessive et anti-bouloches');
   await exp(50, 990, 'Emballages', 'Action', "Sacs d'envoi");
   await saveGoal(today.slice(0, 7), { revenue: 80000, profit: 50000, salesCount: 25, minMargin: 50, maxPurchases: 30000, maxStockCount: 20, cashToKeep: 10000 });
-  // bordereaux reçus par e-mail, à imprimer
-  const now = new Date().toISOString();
-  const label = (id: string, title: string, inDays: number, hour: string) => ({
-    id, kind: 'label', date: today, title, status: 'applied' as const, ref: null, note: '', createdAt: now, resolvedAt: null,
-    event: { kind: 'label', title, deadline: `${shift(today, inDays)}T${hour}`, carrier: 'Mondial Relay', tracking: null },
-  });
-  await getDb().syncedEmails.bulkPut([
-    label('demo-l1', 'Jogging Nike Tech - Taille M', 1, '12:00'),
-    label('demo-l2', 'Polaire Patagonia - Taille M', 2, '18:00'),
-    label('demo-l3', 'T-shirt Palace - Taille M', 3, '09:00'),
-  ]);
 }
 
 /** Efface l'exemple et revient à l'accueil de configuration. */

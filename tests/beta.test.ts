@@ -5,7 +5,7 @@ import { loadDataset } from '../src/lib/actions';
 import { leaveDemo, loadDemoData } from '../src/lib/demo';
 import { saleBreakdown } from '../src/lib/engine';
 import { deviceSummary, FEEDBACK_TOPIC, feedbackMessage, sendFeedback } from '../src/lib/beta';
-import { labelList } from '../src/lib/vinted/labels';
+import { checkCode, codeHash, normalizeCode, storedAccess } from '../src/lib/betaAccess';
 
 let n = 0;
 beforeEach(() => setDb(new VPDatabase(`beta-${++n}`)));
@@ -16,7 +16,8 @@ describe('données d’exemple', () => {
     const ds = await loadDataset();
     expect(ds.settings.onboarded).toBe(true);
     expect(ds.settings.demoData).toBe(true);
-    expect(ds.sales.length).toBe(34);
+    expect(ds.sales.length).toBe(32);
+    expect(ds.settings.showStock).toBe(true);
     // ventes sur le mois en cours et le précédent, aucune dans le futur
     expect(ds.sales.every((s) => s.date <= '2026-11-03')).toBe(true);
     expect(ds.sales.some((s) => s.date.startsWith('2026-11'))).toBe(true);
@@ -27,9 +28,9 @@ describe('données d’exemple', () => {
     expect(ds.sales.filter((x) => x.date.startsWith('2026-10')).length).toBeGreaterThan(10);
     // statuts variés, coûts à compléter, articles à republier, bordereaux
     expect(new Set(ds.sales.map((s) => s.orderStatus)).size).toBeGreaterThanOrEqual(3);
-    expect(ds.items.filter((i) => i.costPending).length).toBe(2);
+    expect(ds.items.some((i) => i.costPending)).toBe(false);
     expect(ds.items.filter((i) => i.status === 'en_vente').length).toBe(3);
-    expect(labelList(await getDb().syncedEmails.toArray(), [], '2026-11-03T10:00')).toHaveLength(3);
+    expect(await getDb().syncedEmails.count()).toBe(0);
     expect(ds.goals[0].id).toBe('2026-11');
 
     await leaveDemo();
@@ -41,7 +42,7 @@ describe('données d’exemple', () => {
   it('peut être rechargé sans doublons', async () => {
     await loadDemoData('2026-11-03');
     await loadDemoData('2026-11-03');
-    expect((await loadDataset()).sales).toHaveLength(34);
+    expect((await loadDataset()).sales).toHaveLength(32);
   });
 });
 
@@ -58,6 +59,7 @@ describe('avis bêta', () => {
     expect(m.message).toContain('★★★★☆');
     expect(m.message).toContain('Contact : @clevin');
     expect(m.message).toContain('Écran : ventes · version abc1234');
+    expect(feedbackMessage({ ...base, tester: 'Testeur 03' }).message.startsWith('[Testeur 03]')).toBe(true);
     // sans infos techniques ni contact
     const bare = feedbackMessage({ ...base, kind: 'idee', rating: null, contact: '', tech: null });
     expect(bare.message).toBe('Le bouton Terminée ne fait rien');
@@ -79,5 +81,23 @@ describe('avis bêta', () => {
     const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1';
     expect(deviceSummary(ua, true, 390)).toBe('iPhone · iOS 18.1 · 390 px · appli installée');
     expect(deviceSummary('Mozilla/5.0 (X11; Linux x86_64)', false, 1280)).toBe('Ordinateur · 1280 px · navigateur');
+  });
+});
+
+describe('accès à la bêta', () => {
+  it('reconnaît un code valide, quelle que soit la saisie, et refuse les autres', async () => {
+    const list = { [await codeHash('CNG-ABCDE-FGHJK')]: 'Testeur 07' };
+    expect(normalizeCode(' cng-abcde fghjk ')).toBe('CNGABCDEFGHJK');
+    expect(await checkCode('cng-abcde-fghjk', list)).toEqual({ hash: expect.any(String), tester: 'Testeur 07' });
+    expect(await checkCode('CNGABCDEFGHJK', list)).not.toBeNull();
+    expect(await checkCode('CNG-ABCDE-FGHJX', list)).toBeNull();
+    expect(await checkCode('CNG-ABC', list)).toBeNull();
+  });
+
+  it('les vrais codes ne sont pas dans le code source, seulement leurs empreintes', async () => {
+    const { ACCESS } = await import('../src/lib/betaAccess');
+    expect(Object.keys(ACCESS)).toHaveLength(20);
+    expect(Object.keys(ACCESS).every((h) => /^[0-9a-f]{64}$/.test(h))).toBe(true);
+    expect(storedAccess(ACCESS)).toBeNull(); // pas de localStorage ici : accès fermé
   });
 });

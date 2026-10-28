@@ -6,6 +6,7 @@
  *  - ne supprime jamais silencieusement une opération financière (annulation = statut + ajustement).
  */
 import { getDb, DATA_TABLES } from './db';
+import { BETA } from './beta';
 import { splitPurchase, splitSale, itemCost } from './engine';
 import { allocate, sum, type Cents } from './money';
 import { todayISO } from './period';
@@ -65,7 +66,7 @@ export function defaultSettings(today = todayISO()): Settings {
     saleSound: 'kaching',
     customSoundId: null,
     autoRecord: true,
-    showStock: false,
+    showStock: BETA,
     demoData: false,
     hideAmounts: false,
     ntfyTopic: '',

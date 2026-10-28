@@ -32,6 +32,9 @@ import { Republish } from './screens/Republish';
 import { MonthCard } from './screens/MonthCard';
 import { PullToRefresh } from './ui/PullToRefresh';
 import { Feedback } from './screens/Feedback';
+import { BetaGate, Locked } from './screens/BetaGate';
+import { BETA, isLocked } from './lib/beta';
+import { storedAccess } from './lib/betaAccess';
 import { installPeek, setPrivacy } from './lib/privacy';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
@@ -39,13 +42,14 @@ import { useUI } from './ui/kit';
 
 export function App() {
   const ds = useLiveDataset();
+  const [access, setAccess] = useState(() => (BETA ? storedAccess() : null));
   useSplash(!!ds);
   // tant que les données ne sont pas chargées, l'écran de chargement (index.html) reste affiché
   if (!ds) return null;
   return (
     <DataContext.Provider value={ds}>
       <UIProvider>
-        <div className="app">{ds.settings.onboarded ? <Shell /> : <Onboarding />}</div>
+        <div className="app">{BETA && !access ? <BetaGate onOpen={setAccess} /> : ds.settings.onboarded ? <Shell /> : <Onboarding />}</div>
       </UIProvider>
     </DataContext.Provider>
   );
@@ -102,6 +106,7 @@ function Shell() {
     case 'avis': screen = <Feedback from={r1} />; break;
     default: screen = <Home />;
   }
+  if (isLocked(r0)) screen = <Locked route={r0!} />;
 
   const showStock = useData().settings.showStock === true;
   const tab = r0 === 'depenses' ? 'depenses' : r0 === 'stock' ? 'stock' : r0 === 'ventes' ? 'ventes' : r0 === 'bilan' ? 'bilan' : r0 === undefined ? 'home' : '';

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BUILD, deviceSummary, FEEDBACK_KINDS, feedbackMessage, sendFeedback, type FeedbackInput, type FeedbackKind } from '../lib/beta';
 import { go } from '../lib/router';
+import { storedAccess } from '../lib/betaAccess';
 import { ErrorBox, Field, PageHeader, useAction, useUI } from '../ui/kit';
 
 /** « Donner mon avis » (version bêta) : envoyé directement en notification au créateur de l'appli. */
@@ -15,7 +16,7 @@ export function Feedback({ from }: { from?: string }) {
   const { error, run, busy } = useAction();
 
   const input = (): FeedbackInput => ({
-    kind, rating, message, contact,
+    kind, rating, message, contact, tester: storedAccess()?.tester ?? null,
     tech: tech ? {
       screen: from ? decodeURIComponent(from) : '',
       build: BUILD,

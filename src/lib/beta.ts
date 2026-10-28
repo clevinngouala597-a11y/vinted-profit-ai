@@ -10,6 +10,15 @@ export const BETA = import.meta.env.VITE_BETA === '1';
 export const BUILD: string = (import.meta.env.VITE_BUILD || 'dev').slice(0, 7);
 export const FEEDBACK_TOPIC = 'cng-vinted-avis-d64bxo3kxbfgy7e9uplx';
 
+/** Fonctions réservées à la version complète pendant la bêta (écran → nom affiché). */
+export const LOCKED: Record<string, string> = {
+  previsions: 'Prévisions', fiscal: 'Fiscalité', tresorerie: 'Trésorerie et réinvestissement', exports: 'Exports et sauvegarde', import: 'Import',
+  annonce: 'Annonce IA', photos: 'Photos IA',
+  messages: 'Messages prêts', republier: 'À republier', calculateur: 'Calculateur de prix', resume: 'Résumé du mois',
+  synchro: 'Synchro Vinted (Gmail)', 'a-valider': 'Opérations à valider', couts: "Prix d'achat à indiquer", bordereaux: 'Bordereaux',
+};
+export const isLocked = (route: string | undefined) => BETA && !!route && route.split('?')[0] in LOCKED;
+
 export const FEEDBACK_KINDS = [
   { id: 'bug', label: '🐞 Un bug', tag: 'bug', title: 'Bug' },
   { id: 'idee', label: '💡 Une idée', tag: 'bulb', title: 'Idée' },
@@ -20,6 +29,8 @@ export type FeedbackKind = (typeof FEEDBACK_KINDS)[number]['id'];
 
 export interface FeedbackInput {
   kind: FeedbackKind;
+  /** « Testeur 03 » (code d'invitation) */
+  tester?: string | null;
   /** 1 à 5, ou null si pas de note */
   rating: number | null;
   message: string;
@@ -39,6 +50,7 @@ export function deviceSummary(ua: string, standalone: boolean, width: number) {
 export function feedbackMessage(f: FeedbackInput) {
   const kind = FEEDBACK_KINDS.find((k) => k.id === f.kind)!;
   const lines = [f.message.trim()];
+  if (f.tester) lines.unshift(`[${f.tester}]`);
   if (f.rating) lines.push('', `Note : ${'★'.repeat(f.rating)}${'☆'.repeat(5 - f.rating)}`);
   if (f.contact.trim()) lines.push(`Contact : ${f.contact.trim()}`);
   if (f.tech) lines.push('', `Écran : ${f.tech.screen || 'accueil'} · version ${f.tech.build}`, f.tech.device);
@@ -60,4 +72,9 @@ export async function sendFeedback(f: FeedbackInput, fetcher: typeof fetch = fet
     throw new Error('Pas de connexion internet : réessaie dans un moment.');
   }
   if (!res.ok) throw new Error(res.status === 429 ? 'Trop d’envois d’un coup : réessaie dans une minute.' : 'Envoi impossible pour le moment, réessaie plus tard.');
+}
+
+/** Prévient le créateur de l'appli qu'un testeur vient d'ouvrir la bêta. */
+export async function announceTester(tester: string, fetcher: typeof fetch = fetch) {
+  await fetcher('https://ntfy.sh/', { method: 'POST', body: JSON.stringify({ topic: FEEDBACK_TOPIC, title: `Nouveau testeur · ${tester}`, message: `${tester} vient d'ouvrir la bêta.`, tags: ['tada'], priority: 3 }) }).catch(() => {});
 }

@@ -339,3 +339,5 @@ body::after {
 .beta-badge { display: inline-block; vertical-align: middle; margin-left: 10px; font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--green-ink); background: var(--green); padding: 4px 7px 4px 9px; border-radius: 7px; position: relative; top: -3px; }
 .beta-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; border-radius: 16px; color: var(--text); font: inherit;
   background: linear-gradient(120deg, rgba(99,247,123,.14), rgba(56,189,248,.08)); border: 1px solid rgba(99,247,123,.25); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.menu-item.locked { opacity: 0.55; }
+.gate-code { text-align: center; font-size: 22px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
