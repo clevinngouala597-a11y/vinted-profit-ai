@@ -93,6 +93,7 @@ export function Home() {
         </button>
       )}
 
+      <div className="home-cols"><div className="home-main">
       <section className="hero" style={{ marginTop: 14 }} aria-label="Bénéfice de la période">
         <div className="hero-label">Bénéfice commercial <InfoButton k="profit" /></div>
         <div className="hero-amount"><BigMoney c={m.commercialProfit} /></div>
@@ -153,6 +154,7 @@ export function Home() {
         <Tile k="available" label="Disponible" value={formatEuros(re.available)} note="pour de nouveaux achats" onClick={() => go('tresorerie')} />
       </div>
 
+      </div><div className="home-side">
       <h2>Évolution</h2>
       <div className="card"><TrendChart entries={entries} range={p.range} prevRange={prevR} today={p.today} /></div>
 
@@ -169,6 +171,7 @@ export function Home() {
       )}
 
       <RecentActivity />
+      </div></div>
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         {BETA && <MenuLink icon={<IMail width={18} height={18} />} title="Donner mon avis" sub="Un bug, une idée ? Ça m'arrive directement" to="avis" close={() => setMenu(false)} />}

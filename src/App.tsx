@@ -39,6 +39,7 @@ import { installPeek, setPrivacy } from './lib/privacy';
 import { applyTheme } from './lib/theme';
 import { activeShop, scopeDataset } from './lib/shops';
 import { AppLock } from './ui/AppLock';
+import { Sidebar, useWide } from './ui/Sidebar';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
 import { useUI } from './ui/kit';
@@ -79,12 +80,14 @@ function Shell() {
   useEffect(() => installPeek(), []);
   const [addOpen, setAddOpen] = useState(false);
   useAutoSync();
+  const wide = useWide();
 
   let screen;
   switch (r0) {
     case undefined: screen = <Home />; break;
-    case 'stock': screen = r1 ? <ItemDetail id={r1} /> : <Stock />; break;
-    case 'ventes': screen = r1 ? <SaleDetail id={r1} /> : <Sales />; break;
+    // sur ordinateur : la liste à gauche, le détail à droite
+    case 'stock': screen = wide ? <Split list={<Stock />} detail={r1 ? <ItemDetail key={r1} id={r1} /> : null} empty="Choisis un article pour voir son détail." /> : r1 ? <ItemDetail id={r1} /> : <Stock />; break;
+    case 'ventes': screen = wide ? <Split list={<Sales />} detail={r1 ? <SaleDetail key={r1} id={r1} /> : null} empty="Choisis une vente pour voir son détail." /> : r1 ? <SaleDetail id={r1} /> : <Sales />; break;
     case 'bilan': screen = <Bilan />; break;
     case 'achat': screen = <PurchaseForm />; break;
     case 'vente': screen = <SaleForm />; break;
@@ -125,8 +128,9 @@ function Shell() {
   return (
     <>
       <SaleBanner />
+      {wide && <Sidebar route={r0} onAdd={() => setAddOpen(true)} />}
       <PullToRefresh onRefresh={refresh}>
-        <main className="page" key={r0 + (r1 ?? '')}>{screen}</main>
+        <main className={`page page-${r0 || 'accueil'}`} key={wide && (r0 === 'ventes' || r0 === 'stock') ? r0 : r0 + (r1 ?? '')}>{screen}</main>
       </PullToRefresh>
       <nav className="tabbar" aria-label="Navigation principale">
         <div className="tabbar-inner">
@@ -217,4 +221,14 @@ function useAutoSync() {
     document.addEventListener('visibilitychange', tick);
     return () => document.removeEventListener('visibilitychange', tick);
   }, []);
+}
+
+/** Liste + détail côte à côte (ordinateur). */
+function Split({ list, detail, empty }: { list: React.ReactNode; detail: React.ReactNode; empty: string }) {
+  return (
+    <div className="split">
+      <div className="split-list">{list}</div>
+      <div className="split-detail">{detail ?? <div className="split-empty">{empty}</div>}</div>
+    </div>
+  );
 }

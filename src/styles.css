@@ -407,3 +407,68 @@ html[data-theme='light'] .beta-badge { color: #fff; }
 
 /* ---------- Dressings ---------- */
 .shop-tag { display: inline-block; font-size: 11px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+
+/* ======================================================================
+   Version ordinateur (écran large) : menu à gauche, contenu en colonnes.
+   Sur téléphone, rien de ce qui suit ne s'applique.
+   ====================================================================== */
+.sidebar { display: none; }
+@media (min-width: 1024px) {
+  :root { --side: 248px; --tabbar: 0px; }
+  .app { max-width: none; }
+  .tabbar, .ptr { display: none; }
+  .sidebar {
+    display: flex; flex-direction: column; gap: 2px; position: fixed; left: 0; top: 0; bottom: 0; width: var(--side); z-index: 20;
+    padding: 20px 14px; overflow-y: auto; background: var(--tabbar-bg); -webkit-backdrop-filter: blur(26px) saturate(170%); backdrop-filter: blur(26px) saturate(170%);
+    border-right: 1px solid var(--glass-line);
+  }
+  .side-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 17px; padding: 2px 8px 16px; }
+  .side-brand img { border-radius: 9px; }
+  .side-add { margin: 0 0 14px; padding: 11px; font-size: 14.5px; }
+  .side-title { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); padding: 16px 10px 6px; }
+  .side-link { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 11px; color: var(--muted); text-decoration: none; font-weight: 650; font-size: 14.5px; }
+  .side-link svg { width: 19px; height: 19px; flex: none; }
+  .side-link:hover { background: var(--hover); color: var(--text); }
+  .side-link[aria-current='page'] { background: var(--green-soft); color: var(--text); }
+  .side-link[aria-current='page'] svg { color: var(--green); }
+  .side-lock { margin-left: auto; font-size: 12px; }
+
+  .page { margin-left: var(--side); max-width: 1180px; padding: 30px 40px 60px; }
+  .top h1 { font-size: 30px; }
+
+  /* accueil : chiffres à gauche, évolution et alertes à droite */
+  .home-cols { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  .home-side > h2:first-child { margin-top: 14px; }
+  .home-main .grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* liste + détail */
+  .split { display: grid; grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.1fr); gap: 24px; align-items: start; }
+  .split-detail { position: sticky; top: 24px; max-height: calc(100dvh - 48px); overflow-y: auto; padding-right: 4px; }
+  .split-detail .back { display: none; }
+  .split-empty { display: grid; place-items: center; min-height: 320px; border: 1px dashed var(--line); border-radius: var(--r-card); color: var(--faint); font-weight: 600; }
+
+  /* écrans de rapport : deux colonnes de cartes */
+  .page-bilan, .page-statistiques, .page-fiscal, .page-tresorerie, .page-reglages, .page-synchro, .page-objectifs { columns: 2 460px; column-gap: 24px; }
+  .page-bilan > *, .page-statistiques > *, .page-fiscal > *, .page-tresorerie > *, .page-reglages > *, .page-synchro > *, .page-objectifs > * { break-inside: avoid; }
+  .page-bilan > .top, .page-statistiques > .top, .page-fiscal > .top, .page-tresorerie > .top, .page-reglages > .top, .page-synchro > .top, .page-objectifs > .top { column-span: all; }
+  .page h2 { break-after: avoid; }
+
+  /* fenêtres : au centre de l'écran plutôt qu'en bas */
+  .sheet { left: 50%; right: auto; bottom: auto; top: 50%; width: min(520px, calc(100vw - 48px)); transform: translate(-50%, -50%); border-radius: 26px; border-bottom: 1px solid var(--glass-line);
+    max-height: 86dvh; padding-bottom: 22px; animation: sheet-pop 0.28s cubic-bezier(0.2, 0.9, 0.25, 1.05); }
+  .sheet-grip { display: none; }
+  @keyframes sheet-pop { from { transform: translate(-50%, -46%) scale(0.96); opacity: 0; filter: blur(6px); } }
+  .toast { bottom: 28px; left: calc(50% + var(--side) / 2); }
+  .sale-banner { left: calc(var(--side) + 24px); right: auto; width: 420px; margin: 0; }
+  .sticky-actions { bottom: 16px; }
+  .lock-screen .pin-pad button:hover { background: var(--card-2); }
+  .btn:hover { filter: brightness(1.06); }
+  .li:hover, .menu-item:hover { background: var(--hover); }
+}
+@media (min-width: 1440px) {
+  .page { max-width: 1260px; padding-left: 56px; padding-right: 56px; }
+}
+@media (min-width: 1024px) {
+  /* le menu ☰ fait doublon avec le menu latéral */
+  .page-accueil .top .icon-btn[aria-label^='Menu'] { display: none; }
+}
