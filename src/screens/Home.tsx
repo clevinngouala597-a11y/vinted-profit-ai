@@ -22,6 +22,7 @@ import { BETA, isLocked } from '../lib/beta';
 import { isAdmin, viewAsTester } from '../lib/betaAccess';
 import { leaveDemo } from '../lib/demo';
 import { useUI } from '../ui/kit';
+import { ShopSwitcher } from '../ui/ShopPicker';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
 import { NotifRow, useNotifications } from './Notifications';
@@ -72,6 +73,7 @@ export function Home() {
         </div>
       </header>
 
+      <ShopSwitcher />
       <PeriodPicker p={p} />
       {BETA && <BetaCards demo={ds.settings.demoData === true} />}
 

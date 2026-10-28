@@ -78,6 +78,12 @@ Application mobile (PWA installable sur iPhone) de comptabilité, de stock et de
 
 Les règles de calcul sont détaillées dans [docs/methodes-de-calcul.md](docs/methodes-de-calcul.md).
 
+### Apparence, verrouillage et dressings
+
+- **Mode clair** : Réglages → Apparence (Sombre, Clair ou Auto, qui suit l'iPhone). Toutes les couleurs passent par des variables CSS (`html[data-theme='light']` dans `src/styles.css`).
+- **Verrouillage Face ID** : Réglages → Verrouillage. Un code de secours (4 à 6 chiffres, seule son empreinte est gardée) est obligatoire, puis Face ID / Touch ID via une clé d'accès de l'iPhone (WebAuthn, `src/lib/lock.ts`). L'appli se verrouille à l'ouverture et au retour après le délai choisi (toujours, 1, 5 ou 15 min) ; son aperçu est flouté dans le sélecteur d'apps. C'est un verrou d'écran : les données restent sur l'appareil, non chiffrées.
+- **Plusieurs dressings** : Réglages → Dressings. Chaque achat, article, vente et dépense appartient à un dressing (`shop`, absent = principal, donc aucune migration). L'accueil propose « Tous » (total commun) ou un dressing ; tous les écrans affichent alors ce dressing (`scopeDataset` dans `src/lib/shops.ts`). Une vente prend le dressing de son article ; la trésorerie de départ appartient au dressing principal. La synchro lit le pseudo de « Bonjour <pseudo> » dans chaque e-mail Vinted et range l'opération dans le dressing de ce pseudo (pseudo inconnu : principal), avec un rapprochement des ventes limité à ce dressing.
+
 ## Pas encore disponible
 
 Rien de ce qui suit n'est simulé dans l'application : ces fonctions sont simplement absentes.

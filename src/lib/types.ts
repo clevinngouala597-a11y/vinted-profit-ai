@@ -50,6 +50,20 @@ export interface Settings {
   demoData: boolean;
   /** Mode discret : montants floutés à l'écran. */
   hideAmounts: boolean;
+  /** Apparence : sombre, clair, ou comme le téléphone. */
+  theme: 'sombre' | 'clair' | 'auto';
+  /** Verrouillage à l'ouverture (Face ID et/ou code de secours). */
+  lockEnabled: boolean;
+  /** Identifiant de la clé d'accès Face ID (null : code seulement). */
+  lockCredential: string | null;
+  /** Empreinte du code de secours. */
+  lockPin: string | null;
+  /** Reverrouiller après ce nombre de minutes hors de l'appli (0 : à chaque fois). */
+  lockDelay: number;
+  /** Dressings (comptes Vinted). Vide : un seul dressing. */
+  shops: { id: string; name: string; pseudo: string }[];
+  /** Dressing affiché : « all » ou l'identifiant d'un dressing. */
+  activeShop: string;
   /** Sujet ntfy secret des notifications « appli fermée ». */
   ntfyTopic: string;
   /** Version du script Google installé (renvoyée par le script) ; null = inconnue. */
@@ -156,6 +170,8 @@ export interface Item {
   photoIds: string[];
   /** Article créé automatiquement par la synchro : son prix d'achat (0 en attendant) reste à indiquer. */
   costPending?: boolean;
+  /** dressing (absent : dressing principal) */
+  shop?: string;
   createdAt: ISOTime;
   updatedAt: ISOTime;
 }
@@ -170,6 +186,8 @@ export interface Purchase {
   /** Frais communs (déplacement, livraison, protection acheteur…). */
   commonFees: Cents;
   notes: string;
+  /** dressing (absent : dressing principal) */
+  shop?: string;
   createdAt: ISOTime;
 }
 
@@ -213,6 +231,8 @@ export interface Sale {
   closedAt: ISODate | null;
   cancelledAt: ISODate | null;
   notes: string;
+  /** dressing (absent : dressing principal) */
+  shop?: string;
   createdAt: ISOTime;
 }
 
@@ -263,6 +283,8 @@ export interface Expense {
   saleId: string | null;
   attachmentId: string | null;
   validated: boolean;
+  /** dressing (absent : dressing principal) */
+  shop?: string;
   createdAt: ISOTime;
 }
 
@@ -339,6 +361,10 @@ export interface SyncedEmail {
   note: string;
   createdAt: ISOTime;
   resolvedAt: ISOTime | null;
+  /** pseudo Vinted du destinataire (« Bonjour … ») */
+  pseudo?: string | null;
+  /** dressing de l'e-mail (absent : principal) */
+  shop?: string;
 }
 
 /** Notification masquée par l'utilisateur (les notifications elles-mêmes sont recalculées). */

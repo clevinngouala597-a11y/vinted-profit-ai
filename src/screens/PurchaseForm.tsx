@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { defaultShopFor } from '../lib/shops';
+import { ShopField } from '../ui/ShopPicker';
 import { recordPurchase, savePhoto } from '../lib/actions';
 import { splitPurchase } from '../lib/engine';
 import { compressImage } from '../lib/images';
@@ -31,6 +33,7 @@ const newLine = (category = DEFAULT_CATEGORIES[1]): Line => ({
 
 export function PurchaseForm() {
   const ds = useData();
+  const [shop, setShop] = useState(() => defaultShopFor(ds.settings));
   const ui = useUI();
   const [date, setDate] = useState(todayISO());
   const [source, setSource] = useState('');
@@ -74,7 +77,7 @@ export function PurchaseForm() {
       }
       return recordPurchase({
         date, source, paymentMethod: payment, commonFees: cents(fees),
-        lotPrice: mode === 'lot' ? cents(lotPrice) : null, notes, lines: withPhotos,
+        lotPrice: mode === 'lot' ? cents(lotPrice) : null, notes, lines: withPhotos, shop,
       });
     });
     if (res) {
@@ -87,6 +90,7 @@ export function PurchaseForm() {
     <>
       <PageHeader title="Nouvel achat" sub="Un article ou un lot acheté en une fois" backTo="" />
       <ErrorBox error={error} />
+      <ShopField value={shop} onChange={setShop} />
 
       <div className="cols">
         <Field label="Date"><input type="date" className="input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} /></Field>

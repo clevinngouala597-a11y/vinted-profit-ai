@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { shopOf } from '../lib/shops';
+import { ShopTag } from '../ui/ShopPicker';
 import { isAwaitingPayment, saleBreakdown } from '../lib/engine';
 import { formatEuros } from '../lib/money';
 import { formatDate } from '../lib/period';
@@ -75,7 +77,7 @@ export function Sales() {
                 <button key={b.sale.id} className="li" onClick={() => go(`ventes/${b.sale.id}`)}>
                   <Thumb photoId={first?.photoIds[0]} name={title} />
                   <span className="li-main">
-                    <div className="li-title">{title}</div>
+                    <div className="li-title">{title}<ShopTag id={shopOf(b.sale)} /></div>
                     <div className="li-sub">{formatDate(b.sale.date)} · {formatEuros(b.netRevenue)}{isAwaitingPayment(ds, b.sale) ? ' · paiement en attente' : ''}</div>
                     <span className={`badge ${orderBadge(b.sale.orderStatus)}`} style={{ marginTop: 4 }}>{ORDER_LABEL[b.sale.orderStatus]}</span>
                   </span>

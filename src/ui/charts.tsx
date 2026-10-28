@@ -40,8 +40,8 @@ export function RevenueProfitChart({ data }: { data: SeriesPoint[] }) {
           const on = i === active && !empty;
           return (
             <g key={d.key} onClick={() => setSel(i)} style={{ cursor: 'pointer' }}>
-              <rect x={slot * i} y={0} width={slot} height={H} fill={on ? 'rgba(255,255,255,0.04)' : 'transparent'} rx="6" />
-              <rect x={cx - bw - 1} y={y(Math.max(0, d.revenue))} width={bw} height={Math.max(0, y(0) - y(d.revenue))} rx="3" fill="#3a403a" />
+              <rect x={slot * i} y={0} width={slot} height={H} fill={on ? 'var(--hover)' : 'transparent'} rx="6" />
+              <rect x={cx - bw - 1} y={y(Math.max(0, d.revenue))} width={bw} height={Math.max(0, y(0) - y(d.revenue))} rx="3" fill="var(--neutral)" />
               <rect
                 x={cx + 1}
                 y={d.profit >= 0 ? y(d.profit) : y(0)}
@@ -58,7 +58,7 @@ export function RevenueProfitChart({ data }: { data: SeriesPoint[] }) {
         })}
       </svg>
       <div className="chart-legend">
-        <span><i style={{ background: '#3a403a' }} />Chiffre d'affaires</span>
+        <span><i style={{ background: 'var(--neutral)' }} />Chiffre d'affaires</span>
         <span><i style={{ background: 'var(--green)' }} />Bénéfice commercial</span>
       </div>
     </div>
@@ -144,9 +144,9 @@ export function GoalChart({ data, format }: { data: { label: string; value: numb
           const reached = d.target > 0 && d.value >= d.target;
           return (
             <g key={d.label} onClick={() => setSel(i)} style={{ cursor: 'pointer' }}>
-              <rect x={slot * i} y={0} width={slot} height={H} fill={i === active ? 'rgba(255,255,255,0.04)' : 'transparent'} rx="6" />
+              <rect x={slot * i} y={0} width={slot} height={H} fill={i === active ? 'var(--hover)' : 'transparent'} rx="6" />
               <rect x={cx - bw / 2} y={d.value >= 0 ? y(d.value) : y(0)} width={bw} height={Math.abs(y(d.value) - y(0))} rx="3"
-                fill={d.value < 0 ? 'var(--loss)' : reached || d.target === 0 ? 'var(--green)' : '#3a403a'} />
+                fill={d.value < 0 ? 'var(--loss)' : reached || d.target === 0 ? 'var(--green)' : 'var(--neutral)'} />
               {d.target > 0 && <line x1={cx - bw / 2 - 4} x2={cx + bw / 2 + 4} y1={y(d.target)} y2={y(d.target)} stroke="var(--text)" strokeWidth="2" strokeLinecap="round" />}
               {i % labelEvery === 0 && <text x={cx} y={H - 4} textAnchor="middle" fontSize="10" fill="var(--faint)">{d.label}</text>}
             </g>
@@ -155,7 +155,7 @@ export function GoalChart({ data, format }: { data: { label: string; value: numb
       </svg>
       <div className="chart-legend">
         <span><i style={{ background: 'var(--green)' }} />Objectif atteint</span>
-        <span><i style={{ background: '#3a403a' }} />Pas encore</span>
+        <span><i style={{ background: 'var(--neutral)' }} />Pas encore</span>
         <span><i style={{ background: 'var(--text)', height: 2, verticalAlign: 3 }} />Objectif</span>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { go, useRoute } from './lib/router';
 import { DataContext, useData, useLiveDataset } from './lib/useData';
 import { SaleBanner } from './ui/SaleBanner';
@@ -36,6 +36,9 @@ import { BetaGate, Locked } from './screens/BetaGate';
 import { BETA, isLocked } from './lib/beta';
 import { storedAccess } from './lib/betaAccess';
 import { installPeek, setPrivacy } from './lib/privacy';
+import { applyTheme } from './lib/theme';
+import { activeShop, scopeDataset } from './lib/shops';
+import { AppLock } from './ui/AppLock';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
 import { useUI } from './ui/kit';
@@ -44,12 +47,16 @@ export function App() {
   const ds = useLiveDataset();
   const [access, setAccess] = useState(() => (BETA ? storedAccess() : null));
   useSplash(!!ds);
+  const theme = ds?.settings.theme;
+  // dressing affiché : tous les écrans voient ses données (les écritures, elles, voient tout)
+  const view = useMemo(() => (ds ? scopeDataset(ds, activeShop(ds.settings)) : ds), [ds]);
+  useEffect(() => applyTheme(theme), [theme]);
   // tant que les données ne sont pas chargées, l'écran de chargement (index.html) reste affiché
   if (!ds) return null;
   return (
-    <DataContext.Provider value={ds}>
+    <DataContext.Provider value={view!}>
       <UIProvider>
-        <div className="app">{BETA && !access ? <BetaGate onOpen={setAccess} /> : ds.settings.onboarded ? <Shell /> : <Onboarding />}</div>
+        <div className="app">{BETA && !access ? <BetaGate onOpen={setAccess} /> : ds.settings.onboarded ? <AppLock><Shell /></AppLock> : <Onboarding />}</div>
       </UIProvider>
     </DataContext.Provider>
   );

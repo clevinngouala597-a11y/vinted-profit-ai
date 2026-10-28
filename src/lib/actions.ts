@@ -7,6 +7,7 @@
  */
 import { getDb, DATA_TABLES } from './db';
 import { BETA } from './beta';
+import { ambientShop, defaultShopFor, MAIN, shopOf } from './shops';
 import { splitPurchase, splitSale, itemCost } from './engine';
 import { allocate, sum, type Cents } from './money';
 import { todayISO } from './period';
@@ -69,6 +70,13 @@ export function defaultSettings(today = todayISO()): Settings {
     showStock: BETA,
     demoData: false,
     hideAmounts: false,
+    theme: 'sombre',
+    lockEnabled: false,
+    lockCredential: null,
+    lockPin: null,
+    lockDelay: 1,
+    shops: [],
+    activeShop: 'all',
     ntfyTopic: '',
     scriptVersion: null,
     scriptNotifications: false,
@@ -138,8 +146,8 @@ export async function saveSettings(patch: Partial<Settings>) {
   const next = { ...cur, ...patch, id: 'main' as const };
   await db.settings.put(next);
   // la clé secrète de synchronisation n'apparaît jamais dans le journal
-  const { syncToken: _hidden, anthropicKey: _key, ...visible } = patch;
-  await audit('settings', 'main', 'modification', JSON.stringify({ ...visible, ...(_hidden !== undefined ? { syncToken: '••••' } : {}), ...(_key !== undefined ? { anthropicKey: '••••' } : {}) }));
+  const { syncToken: _hidden, anthropicKey: _key, lockPin: _pin, lockCredential: _cred, ...visible } = patch;
+  await audit('settings', 'main', 'modification', JSON.stringify({ ...visible, ...(_hidden !== undefined ? { syncToken: '••••' } : {}), ...(_key !== undefined ? { anthropicKey: '••••' } : {}), ...(_pin !== undefined ? { lockPin: '••••' } : {}) }));
   return next;
 }
 
@@ -171,6 +179,8 @@ export interface PurchaseInput {
   /** Prix global d'un lot ; si null, chaque ligne a son propre prix. */
   lotPrice: Cents | null;
   notes?: string;
+  /** dressing (par défaut : celui affiché) */
+  shop?: string;
   lines: PurchaseLineInput[];
 }
 
@@ -191,6 +201,7 @@ export async function recordPurchase(input: PurchaseInput): Promise<{ purchaseId
 
   const split = splitPurchase(input.lines, input.commonFees, input.lotPrice);
   const db = getDb();
+  const shop = input.shop ?? ambientShop() ?? defaultShopFor((await db.settings.get('main')) ?? defaultSettings());
   const purchaseId = uid();
   const itemIds: string[] = [];
   const t = now();
@@ -205,6 +216,7 @@ export async function recordPurchase(input: PurchaseInput): Promise<{ purchaseId
       itemsTotal,
       commonFees: input.commonFees,
       notes: input.notes?.trim() ?? '',
+      ...(shop !== MAIN ? { shop } : {}),
       createdAt: t,
     });
     for (let k = 0; k < input.lines.length; k++) {
@@ -235,6 +247,7 @@ export async function recordPurchase(input: PurchaseInput): Promise<{ purchaseId
         listingRef: '',
         photoIds: l.photoIds ?? [],
         ...(l.costPending ? { costPending: true } : {}),
+        ...(shop !== MAIN ? { shop } : {}),
         createdAt: t,
         updatedAt: t,
       });
@@ -315,6 +328,8 @@ export async function recordSale(input: SaleInput): Promise<string> {
       closedAt: null,
       cancelledAt: null,
       notes: input.notes?.trim() ?? '',
+      // une vente appartient au dressing de ses articles
+      ...(shopOf(its[0]) !== MAIN ? { shop: shopOf(its[0]) } : {}),
       createdAt: t,
     });
     for (const s of split) {
@@ -750,9 +765,13 @@ export async function recordExpense(input: ExpenseInput): Promise<string> {
   if (!input.category) fail('Choisis une catégorie.');
   const db = getDb();
   const id = uid();
+  // une dépense liée à une vente va dans le dressing de cette vente
+  const linked = input.saleId ? await db.sales.get(input.saleId) : null;
+  const shop = input.shop ?? (linked ? shopOf(linked) : null) ?? ambientShop() ?? defaultShopFor((await db.settings.get('main')) ?? defaultSettings());
   await db.transaction('rw', [db.expenses, db.transactions, db.sales, db.auditLogs], async () => {
     if (input.saleId && !(await db.sales.get(input.saleId))) fail('La vente liée est introuvable.');
-    await db.expenses.add({ ...input, id, validated: input.validated ?? true, createdAt: now() });
+    const { shop: _s, ...rest } = input;
+    await db.expenses.add({ ...rest, ...(shop !== MAIN ? { shop } : {}), id, validated: input.validated ?? true, createdAt: now() });
     await db.transactions.add(
       tx({
         date: input.date,

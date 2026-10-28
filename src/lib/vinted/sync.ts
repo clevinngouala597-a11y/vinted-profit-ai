@@ -11,6 +11,7 @@
  *       - dépendants d'une vente encore à valider → mis en attente puis réessayés.
  * Rien n'est jamais enregistré deux fois : une vente déjà saisie à la main est reconnue.
  */
+import { extractPseudo, MAIN, scopeDataset, shopForPseudo, shopOf, withShop } from '../shops';
 import {
   AUTO_ITEM_SOURCE,
   MANUAL_STATUS_NOTE,
@@ -200,6 +201,7 @@ export function guessCategory(title: string): string {
 export async function ingestEmails(emails: RawEmail[]): Promise<number> {
   const db = getDb();
   const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
+  const settings = (await loadDataset()).settings;
   let added = 0;
   for (const e of emails) {
     if (known.has(e.id)) continue;
@@ -217,6 +219,9 @@ export async function ingestEmails(emails: RawEmail[]): Promise<number> {
       note: ev ? '' : 'E-mail sans opération à enregistrer',
       createdAt: now(),
       resolvedAt: null,
+      // « Bonjour <pseudo> » : range l'e-mail dans le bon dressing
+      pseudo: extractPseudo(e.text),
+      ...(shopForPseudo(settings, extractPseudo(e.text)) !== MAIN ? { shop: shopForPseudo(settings, extractPseudo(e.text)) } : {}),
     });
     if (ev) added++;
   }
@@ -243,7 +248,7 @@ export async function processPending(today: ISODate = new Date().toISOString().s
     const ev = row.event as VintedEvent;
     let out: Outcome;
     try {
-      out = await applyEvent(row, ev, today, auto);
+      out = await withShop(shopOf(row), () => applyEvent(row, ev, today, auto));
     } catch (e) {
       out = { status: 'inbox', note: e instanceof Error ? e.message : 'Erreur inattendue' };
     }
@@ -278,8 +283,10 @@ async function cancelUnpaid(today: ISODate) {
 }
 
 async function applyEvent(row: SyncedEmail, ev: VintedEvent, today: ISODate, auto: boolean): Promise<Outcome> {
-  const ds = await loadDataset();
-  const pairing = pairEvents(await getDb().syncedEmails.toArray());
+  // chaque dressing est traité à part : une vente n'est rapprochée que des ventes de son dressing
+  const shop = shopOf(row);
+  const ds = scopeDataset(await loadDataset(), shop);
+  const pairing = pairEvents((await getDb().syncedEmails.toArray()).filter((r) => shopOf(r) === shop));
   // vente concernée par un paiement / une annulation / une expédition, d'après les e-mails
   let linked: Sale | null | undefined; // undefined : aucun e-mail de vente ne correspond
   let linkedRow: SyncedEmail | undefined;

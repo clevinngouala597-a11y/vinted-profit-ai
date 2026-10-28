@@ -1,4 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { defaultShopFor } from '../lib/shops';
+import { ShopField } from '../ui/ShopPicker';
 import { useState } from 'react';
 import { getDb } from '../lib/db';
 import { deleteExpense, findDuplicateExpenses, recordExpense, savePhoto } from '../lib/actions';
@@ -90,6 +92,7 @@ function ExpenseSheet({ e, onClose }: { e: Expense; onClose: () => void }) {
 
 export function ExpenseForm() {
   const ds = useData();
+  const [shop, setShop] = useState(() => defaultShopFor(ds.settings));
   const ui = useUI();
   const linkedSale = queryParam('vente');
   const [date, setDate] = useState(todayISO());
@@ -134,7 +137,7 @@ export function ExpenseForm() {
     if (dups.length && !(await ui.confirm({ title: 'Dépense en double ?', text: `Une dépense de ${formatEuros(a)} existe déjà le ${formatDate(dups[0].date)} (${dups[0].description || dups[0].category}). L'enregistrer quand même ?`, confirmLabel: 'Enregistrer quand même' }))) return;
     const ok = await run(async () => {
       const attachmentId = file ? await savePhoto(file) : null;
-      await recordExpense({ date, amount: a, category, supplier, description, saleId: saleId || null, attachmentId });
+      await recordExpense({ date, amount: a, category, supplier, description, saleId: saleId || null, attachmentId, ...(saleId ? {} : { shop }) });
       return true;
     });
     if (ok) {
@@ -186,6 +189,7 @@ export function ExpenseForm() {
           </span>
         </div>
       )}
+      <ShopField value={shop} onChange={setShop} />
       <div className="cols">
         <Field label="Montant"><MoneyInput value={amount} onChange={setAmount} /></Field>
         <Field label="Date"><input type="date" className="input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} /></Field>

@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { Appearance, LockSettings, ShopSettings } from './SettingsExtra';
 import { BETA, BUILD } from '../lib/beta';
 import { isAdmin, setViewAsTester, viewAsTester } from '../lib/betaAccess';
 import { useState } from 'react';
@@ -124,6 +125,9 @@ export function SettingsScreen() {
     <>
       <PageHeader title="Réglages" backTo="" />
       <ErrorBox error={error} />
+      <Appearance />
+      <LockSettings />
+      <ShopSettings />
       <SettingsFields d={d} set={setD} />
       <button className="btn btn-primary" disabled={busy} onClick={async () => {
         const ok = await run(async () => { await saveSettings(fromDraft(d)); return true; });
