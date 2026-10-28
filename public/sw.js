@@ -1,7 +1,8 @@
 // Service worker : met l'application en cache pour qu'elle s'ouvre sans réseau.
 // Les données ne passent jamais par ici : elles restent dans IndexedDB sur l'appareil.
-const CACHE = 'vpa-v2';
 const SCOPE = self.registration.scope;
+// un cache par version publiée (principale et bêta partagent le même site)
+const CACHE = 'vpa-v3:' + SCOPE;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll([SCOPE, SCOPE + 'manifest.webmanifest', SCOPE + 'icon.svg'])));
@@ -10,7 +11,7 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && (k.endsWith(':' + SCOPE) || !k.includes(':'))).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
   );
 });
 
@@ -18,6 +19,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // la version bêta (sous-dossier beta/) a son propre service worker
+  if (url.href.startsWith(SCOPE + 'beta/')) return;
   // Pages : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
   if (req.mode === 'navigate') {
     e.respondWith(

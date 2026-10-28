@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { PERIOD_LABEL, periodRange, todayISO, type PeriodKey, type Range } from '../lib/period';
 import { Field } from '../ui/kit';
+import { BETA } from '../lib/beta';
 
-const KEY = 'vpa.period';
+const KEY = BETA ? 'vpa-beta.period' : 'vpa.period';
 function load(): { key: PeriodKey; custom?: Range } {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');

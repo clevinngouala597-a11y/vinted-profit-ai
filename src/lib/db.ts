@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { BETA } from './beta';
 import type {
   Attachment,
   AuditLog,
@@ -38,7 +39,7 @@ export class VPDatabase extends Dexie {
   notifications!: Table<NotificationState, string>;
   syncedEmails!: Table<SyncedEmail, string>;
 
-  constructor(name = 'vinted-profit-ai') {
+  constructor(name = BETA ? 'cng-vinted-beta' : 'vinted-profit-ai') {
     super(name);
     this.version(1).stores({
       settings: 'id',

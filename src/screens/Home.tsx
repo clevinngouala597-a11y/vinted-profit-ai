@@ -18,6 +18,9 @@ import { labelList, labelsToPrint } from '../lib/vinted/labels';
 import { TrendChart } from '../ui/TrendChart';
 import { IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { saveSettings } from '../lib/actions';
+import { BETA } from '../lib/beta';
+import { leaveDemo } from '../lib/demo';
+import { useUI } from '../ui/kit';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
 import { NotifRow, useNotifications } from './Notifications';
@@ -50,7 +53,7 @@ export function Home() {
     <>
       <header className="top">
         <div>
-          <h1>{ds.settings.businessName || 'Mon activité'}</h1>
+          <h1>{ds.settings.businessName || 'Mon activité'}{BETA && <span className="beta-badge">BÊTA</span>}</h1>
           <div className="sub">{formatRange(p.range)}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -69,6 +72,7 @@ export function Home() {
       </header>
 
       <PeriodPicker p={p} />
+      {BETA && <BetaCards demo={ds.settings.demoData === true} />}
 
       {toPrint.length > 0 && (
         <button className="alert warn" style={{ width: '100%', border: 0, marginTop: 12, textAlign: 'left', cursor: 'pointer' }} onClick={() => go('bordereaux')}>
@@ -164,6 +168,7 @@ export function Home() {
       <RecentActivity />
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
+        {BETA && <MenuLink icon={<IMail width={18} height={18} />} title="Donner mon avis" sub="Un bug, une idée ? Ça m'arrive directement" to="avis" close={() => setMenu(false)} />}
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />
         <MenuLink icon={<ITag width={18} height={18} />} title="Annonce IA" sub="Titre, description et prix à partir de tes photos" to="annonce" close={() => setMenu(false)} />
         <MenuLink icon={<ITag width={18} height={18} />} title="Photos IA" sub="Prompts pour des photos réalistes" to="photos" close={() => setMenu(false)} />
@@ -257,5 +262,27 @@ function RecentActivity() {
         ))}
       </div>
     </>
+  );
+}
+
+/** Version bêta : données d'exemple et appel à donner son avis. */
+function BetaCards({ demo }: { demo: boolean }) {
+  const ui = useUI();
+  return (
+    <div style={{ display: 'grid', gap: 8, margin: '0 0 12px' }}>
+      {demo && (
+        <div className="alert warn" style={{ display: 'block' }}>
+          <b>Données d'exemple</b> — tout ce que tu vois est inventé pour tester l'appli.
+          <button className="btn btn-sm btn-ghost" style={{ marginTop: 8, display: 'flex' }} onClick={async () => {
+            if (await ui.confirm({ title: 'Commencer avec tes données ?', text: "L'exemple sera effacé et tu pourras configurer ton propre suivi.", confirmLabel: "Effacer l'exemple" })) await leaveDemo();
+          }}>Commencer avec mes données</button>
+        </div>
+      )}
+      <button className="beta-card" onClick={() => go('avis')}>
+        <span style={{ fontSize: 26 }}>💬</span>
+        <span style={{ flex: 1, textAlign: 'left' }}><b>Tu testes la bêta</b><br /><span className="small muted">Un bug, une idée, un truc pas clair ? Dis-le-moi.</span></span>
+        <IChevron />
+      </button>
+    </div>
   );
 }

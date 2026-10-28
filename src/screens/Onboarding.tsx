@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { defaultSettings, saveSettings } from '../lib/actions';
+import { BETA } from '../lib/beta';
+import { loadDemoData } from '../lib/demo';
+import { todayISO } from '../lib/period';
 import { requestPersistentStorage } from '../lib/db';
 import { ErrorBox, useAction } from '../ui/kit';
 import { fromDraft, SettingsFields, toDraft } from './Settings';
@@ -29,7 +32,14 @@ export function Onboarding() {
             <li>Aucune connexion à ton compte Vinted, aucun mot de passe demandé.</li>
           </ul>
         </div>
-        <button className="btn btn-primary" onClick={() => setStep(1)}>Configurer mon suivi</button>
+        <ErrorBox error={error} />
+        {BETA ? (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <p className="small" style={{ margin: '0 0 6px' }}><span className="beta-badge" style={{ marginLeft: 0, marginRight: 8, top: -1 }}>BÊTA</span>Merci de tester l'appli ! Commence avec un exemple pour tout voir, ou configure directement ton suivi.</p>
+            <button className="btn btn-primary" disabled={busy} onClick={() => run(async () => { await loadDemoData(todayISO()); })}>{busy ? 'Préparation de l’exemple…' : 'Essayer avec un exemple'}</button>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => setStep(1)}>Configurer mon suivi</button>
+          </div>
+        ) : <button className="btn btn-primary" onClick={() => setStep(1)}>Configurer mon suivi</button>}
       </main>
     );
 

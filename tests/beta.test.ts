@@ -1,0 +1,83 @@
+import 'fake-indexeddb/auto';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { VPDatabase, getDb, setDb } from '../src/lib/db';
+import { loadDataset } from '../src/lib/actions';
+import { leaveDemo, loadDemoData } from '../src/lib/demo';
+import { saleBreakdown } from '../src/lib/engine';
+import { deviceSummary, FEEDBACK_TOPIC, feedbackMessage, sendFeedback } from '../src/lib/beta';
+import { labelList } from '../src/lib/vinted/labels';
+
+let n = 0;
+beforeEach(() => setDb(new VPDatabase(`beta-${++n}`)));
+
+describe('données d’exemple', () => {
+  it('remplit l’appli autour d’aujourd’hui, puis s’efface entièrement', async () => {
+    await loadDemoData('2026-11-03');
+    const ds = await loadDataset();
+    expect(ds.settings.onboarded).toBe(true);
+    expect(ds.settings.demoData).toBe(true);
+    expect(ds.sales.length).toBe(34);
+    // ventes sur le mois en cours et le précédent, aucune dans le futur
+    expect(ds.sales.every((s) => s.date <= '2026-11-03')).toBe(true);
+    expect(ds.sales.some((s) => s.date.startsWith('2026-11'))).toBe(true);
+    expect(ds.sales.some((s) => s.date.startsWith('2026-10'))).toBe(true);
+    // bénéfices cohérents : les ventes avec coût connu sont rentables
+    const known = ds.sales.map((s) => saleBreakdown(ds, s)).filter((b) => b.cogs > 0);
+    expect(known.every((b) => b.netRevenue - b.cogs > 0)).toBe(true);
+    expect(ds.sales.filter((x) => x.date.startsWith('2026-10')).length).toBeGreaterThan(10);
+    // statuts variés, coûts à compléter, articles à republier, bordereaux
+    expect(new Set(ds.sales.map((s) => s.orderStatus)).size).toBeGreaterThanOrEqual(3);
+    expect(ds.items.filter((i) => i.costPending).length).toBe(2);
+    expect(ds.items.filter((i) => i.status === 'en_vente').length).toBe(3);
+    expect(labelList(await getDb().syncedEmails.toArray(), [], '2026-11-03T10:00')).toHaveLength(3);
+    expect(ds.goals[0].id).toBe('2026-11');
+
+    await leaveDemo();
+    const empty = await loadDataset();
+    expect(empty.sales).toHaveLength(0);
+    expect(empty.settings.onboarded).toBe(false);
+  });
+
+  it('peut être rechargé sans doublons', async () => {
+    await loadDemoData('2026-11-03');
+    await loadDemoData('2026-11-03');
+    expect((await loadDataset()).sales).toHaveLength(34);
+  });
+});
+
+describe('avis bêta', () => {
+  const base = { kind: 'bug' as const, rating: 4, message: '  Le bouton Terminée ne fait rien  ', contact: '@clevin', tech: { screen: 'ventes', build: 'abc1234', device: 'iPhone · iOS 18.1' } };
+
+  it('forme un message lisible pour la notification', () => {
+    const m = feedbackMessage(base);
+    expect(m.topic).toBe(FEEDBACK_TOPIC);
+    expect(m.title).toBe('Avis bêta · Bug');
+    expect(m.priority).toBe(4);
+    expect(m.tags).toEqual(['bug']);
+    expect(m.message).toContain('Le bouton Terminée ne fait rien');
+    expect(m.message).toContain('★★★★☆');
+    expect(m.message).toContain('Contact : @clevin');
+    expect(m.message).toContain('Écran : ventes · version abc1234');
+    // sans infos techniques ni contact
+    const bare = feedbackMessage({ ...base, kind: 'idee', rating: null, contact: '', tech: null });
+    expect(bare.message).toBe('Le bouton Terminée ne fait rien');
+    expect(bare.priority).toBe(3);
+  });
+
+  it('envoie à ntfy et refuse un avis vide', async () => {
+    const calls: { url: string; body: string }[] = [];
+    const fetcher = (async (url: string, init: RequestInit) => { calls.push({ url, body: String(init.body) }); return new Response('{}', { status: 200 }); }) as unknown as typeof fetch;
+    await sendFeedback(base, fetcher);
+    expect(calls[0].url).toBe('https://ntfy.sh/');
+    expect(JSON.parse(calls[0].body).topic).toBe(FEEDBACK_TOPIC);
+    await expect(sendFeedback({ ...base, message: ' ' }, fetcher)).rejects.toThrow(/quelques mots/);
+    const down = (async () => { throw new TypeError('offline'); }) as unknown as typeof fetch;
+    await expect(sendFeedback(base, down)).rejects.toThrow(/connexion/);
+  });
+
+  it('résume l’appareil sans identifiant', () => {
+    const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1';
+    expect(deviceSummary(ua, true, 390)).toBe('iPhone · iOS 18.1 · 390 px · appli installée');
+    expect(deviceSummary('Mozilla/5.0 (X11; Linux x86_64)', false, 1280)).toBe('Ordinateur · 1280 px · navigateur');
+  });
+});

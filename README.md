@@ -113,6 +113,15 @@ Si la page n'apparaît pas, vérifie une fois dans **Settings → Pages** que la
 
 L'application est ensuite servie à l'adresse `https://<compte>.github.io/vinted-profit-ai/`.
 
+## Version bêta (testeurs)
+
+Une version bêta est publiée à part, à l'adresse `…/vinted-profit-ai/beta/` (`npm run build:beta`, faite automatiquement par le déploiement).
+
+- **Données séparées** : sa propre base sur l'appareil (`cng-vinted-beta`) et son propre cache hors ligne ; installer la bêta à côté de la version principale ne mélange rien.
+- **Essayer avec un exemple** : à l'ouverture, un toucher remplit l'appli avec deux mois de ventes inventées (dates calculées à partir d'aujourd'hui). « Commencer avec mes données » efface l'exemple.
+- **Donner mon avis** : bug, idée, point pas clair ou compliment, avec note facultative. L'avis part en notification ntfy sur le sujet défini dans `src/lib/beta.ts` (s'y abonner dans l'appli ntfy pour les recevoir). Les infos techniques jointes se limitent à l'écran, la version et le type d'appareil ; aucune donnée de vente n'est envoyée.
+- Nom « CNG Vinted Bêta » et icône avec badge BÊTA sur l'écran d'accueil (`beta-assets/`).
+
 ## Installer sur iPhone
 
 1. Ouvrir l'adresse de l'application dans **Safari**.

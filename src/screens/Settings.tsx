@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { BETA, BUILD } from '../lib/beta';
 import { useState } from 'react';
 import { saveSettings, wipeAllData } from '../lib/actions';
 import { getDb } from '../lib/db';
@@ -163,6 +164,7 @@ export function SettingsScreen() {
       <p className="tiny faint" style={{ marginTop: 14 }}>
         Les données sont stockées uniquement sur cet appareil, dans le navigateur. Aucune connexion à Vinted n'est utilisée et ton mot de passe Vinted n'est jamais demandé.
       </p>
+      {BETA && <p className="tiny faint">Version bêta · {BUILD} · <button className="link" style={{ fontSize: 'inherit' }} onClick={() => go('avis/reglages')}>Donner mon avis</button></p>}
     </>
   );
 }

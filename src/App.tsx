@@ -31,6 +31,7 @@ import { Messages } from './screens/Messages';
 import { Republish } from './screens/Republish';
 import { MonthCard } from './screens/MonthCard';
 import { PullToRefresh } from './ui/PullToRefresh';
+import { Feedback } from './screens/Feedback';
 import { installPeek, setPrivacy } from './lib/privacy';
 import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
 import { syncNow } from './lib/vinted/sync';
@@ -98,6 +99,7 @@ function Shell() {
     case 'messages': screen = <Messages />; break;
     case 'republier': screen = <Republish />; break;
     case 'resume': screen = <MonthCard />; break;
+    case 'avis': screen = <Feedback from={r1} />; break;
     default: screen = <Home />;
   }
 

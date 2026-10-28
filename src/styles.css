@@ -81,7 +81,7 @@ h2 .h2-note { color: var(--muted); font-weight: 500; font-size: 13px; margin-lef
 .small { font-size: 13px; }
 .tiny { font-size: 12px; }
 
-.delta { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 999px; }
+.delta { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 999px; white-space: nowrap; flex: none; }
 .delta.up { background: var(--green-soft); color: var(--green); }
 .delta.down { background: var(--loss-soft); color: var(--loss); }
 .delta.flat { background: var(--card-2); color: var(--muted); }
@@ -334,3 +334,8 @@ body::after {
 .privacy .priv.peek { filter: none; }
 .privacy .chart text { filter: blur(4px); }
 .icon-btn[aria-pressed='true'] { color: var(--green); border-color: rgba(99, 247, 123, 0.35); }
+
+/* ---------- Version bêta ---------- */
+.beta-badge { display: inline-block; vertical-align: middle; margin-left: 10px; font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--green-ink); background: var(--green); padding: 4px 7px 4px 9px; border-radius: 7px; position: relative; top: -3px; }
+.beta-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; border-radius: 16px; color: var(--text); font: inherit;
+  background: linear-gradient(120deg, rgba(99,247,123,.14), rgba(56,189,248,.08)); border: 1px solid rgba(99,247,123,.25); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }

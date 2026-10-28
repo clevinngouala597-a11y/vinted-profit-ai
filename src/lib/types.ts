@@ -46,6 +46,8 @@ export interface Settings {
   autoRecord: boolean;
   /** Afficher la gestion du stock (onglet, tuiles, alertes). Masquée par défaut : la synchro s'en occupe. */
   showStock: boolean;
+  /** Version bêta : l'appli contient les données d'exemple. */
+  demoData: boolean;
   /** Mode discret : montants floutés à l'écran. */
   hideAmounts: boolean;
   /** Sujet ntfy secret des notifications « appli fermée ». */
