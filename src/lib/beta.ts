@@ -6,6 +6,8 @@
  * s'y abonne dans l'appli ntfy et reçoit chaque avis sur son téléphone. Le sujet est public (comme
  * tout le code de l'appli) : les testeurs sont prévenus de ne pas y mettre d'informations personnelles.
  */
+import { isAdmin, viewAsTester } from './betaAccess';
+
 export const BETA = import.meta.env.VITE_BETA === '1';
 export const BUILD: string = (import.meta.env.VITE_BUILD || 'dev').slice(0, 7);
 export const FEEDBACK_TOPIC = 'cng-vinted-avis-d64bxo3kxbfgy7e9uplx';
@@ -17,7 +19,7 @@ export const LOCKED: Record<string, string> = {
   messages: 'Messages prêts', republier: 'À republier', calculateur: 'Calculateur de prix', resume: 'Résumé du mois',
   synchro: 'Synchro Vinted (Gmail)', 'a-valider': 'Opérations à valider', couts: "Prix d'achat à indiquer", bordereaux: 'Bordereaux',
 };
-export const isLocked = (route: string | undefined) => BETA && !!route && route.split('?')[0] in LOCKED;
+export const isLocked = (route: string | undefined) => BETA && !!route && route.split('?')[0] in LOCKED && (!isAdmin() || viewAsTester());
 
 export const FEEDBACK_KINDS = [
   { id: 'bug', label: '🐞 Un bug', tag: 'bug', title: 'Bug' },

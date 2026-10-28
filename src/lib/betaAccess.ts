@@ -7,6 +7,7 @@
  * (pas un coffre-fort) : elle évite qu'un lien partagé ouvre la bêta à n'importe qui.
  */
 export const ACCESS: Record<string, string> = {
+  'd04f79ad16a3ea90ca066b963e3a997f3e24454ebed5b1026c2a67517479cdf3': 'Admin',
   '27fb7aee0c4dac5ee75ae60e0d02117ce4c8e095d419539ad5565db1b969b995': 'Testeur 01',
   'ecc90f6eebe3c1484cb34333d6000fb61988be9fed277a5a1515047c7b793cae': 'Testeur 02',
   'cc92b15e482e3e55a17773861488eba6b0786318fea5cfce31805e80da4d7a4c': 'Testeur 03',
@@ -55,6 +56,18 @@ export function storedAccess(list: Record<string, string> = ACCESS): { hash: str
   } catch {
     return null;
   }
+}
+
+export const ADMIN = 'Admin';
+const VIEW_KEY = 'cng-beta-view-as-tester';
+
+/** Accès admin : toutes les fonctions ouvertes, sauf si l'admin choisit de voir l'appli comme un testeur. */
+export const isAdmin = (list: Record<string, string> = ACCESS) => storedAccess(list)?.tester === ADMIN;
+export function viewAsTester() {
+  try { return localStorage.getItem(VIEW_KEY) === '1'; } catch { return false; }
+}
+export function setViewAsTester(on: boolean) {
+  try { if (on) localStorage.setItem(VIEW_KEY, '1'); else localStorage.removeItem(VIEW_KEY); } catch { /* ignore */ }
 }
 
 export function storeAccess(hash: string) {

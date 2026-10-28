@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { announceTester, LOCKED } from '../lib/beta';
-import { checkCode, storeAccess } from '../lib/betaAccess';
+import { ADMIN, checkCode, storeAccess } from '../lib/betaAccess';
 import { go } from '../lib/router';
 import { ErrorBox, PageHeader } from '../ui/kit';
 
@@ -23,7 +23,7 @@ export function BetaGate({ onOpen }: { onOpen: (a: { hash: string; tester: strin
       return setError('Ce code ne fonctionne pas. Vérifie-le (format CNG-XXXXX-XXXXX).');
     }
     storeAccess(ok.hash);
-    void announceTester(ok.tester);
+    if (ok.tester !== ADMIN) void announceTester(ok.tester);
     onOpen(ok);
   };
 

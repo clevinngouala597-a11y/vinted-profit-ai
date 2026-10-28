@@ -96,7 +96,8 @@ describe('accès à la bêta', () => {
 
   it('les vrais codes ne sont pas dans le code source, seulement leurs empreintes', async () => {
     const { ACCESS } = await import('../src/lib/betaAccess');
-    expect(Object.keys(ACCESS)).toHaveLength(20);
+    expect(Object.keys(ACCESS)).toHaveLength(21);
+    expect(Object.values(ACCESS).filter((v) => v === 'Admin')).toHaveLength(1);
     expect(Object.keys(ACCESS).every((h) => /^[0-9a-f]{64}$/.test(h))).toBe(true);
     expect(storedAccess(ACCESS)).toBeNull(); // pas de localStorage ici : accès fermé
   });

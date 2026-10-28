@@ -19,6 +19,7 @@ import { TrendChart } from '../ui/TrendChart';
 import { IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { saveSettings } from '../lib/actions';
 import { BETA, isLocked } from '../lib/beta';
+import { isAdmin, viewAsTester } from '../lib/betaAccess';
 import { leaveDemo } from '../lib/demo';
 import { useUI } from '../ui/kit';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
@@ -53,7 +54,7 @@ export function Home() {
     <>
       <header className="top">
         <div>
-          <h1>{ds.settings.businessName || 'Mon activité'}{BETA && <span className="beta-badge">BÊTA</span>}</h1>
+          <h1>{ds.settings.businessName || 'Mon activité'}{BETA && <span className="beta-badge">{isAdmin() ? (viewAsTester() ? 'BÊTA · VUE TESTEUR' : 'BÊTA · ADMIN') : 'BÊTA'}</span>}</h1>
           <div className="sub">{formatRange(p.range)}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
