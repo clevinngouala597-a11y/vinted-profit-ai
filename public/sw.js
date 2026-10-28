@@ -2,7 +2,7 @@
 // Les données ne passent jamais par ici : elles restent dans IndexedDB sur l'appareil.
 const SCOPE = self.registration.scope;
 // un cache par version publiée (principale et bêta partagent le même site)
-const CACHE = 'vpa-v3:' + SCOPE;
+const CACHE = 'vpa-v4:' + SCOPE;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll([SCOPE, SCOPE + 'manifest.webmanifest', SCOPE + 'icon.svg'])));
@@ -24,13 +24,19 @@ self.addEventListener('fetch', (e) => {
   // Pages : réseau d'abord (pour recevoir les mises à jour), cache si hors ligne
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req)
+      // « no-cache » : on revalide toujours auprès du serveur, jamais d'ancienne page en cache HTTP
+      fetch(req, { cache: 'no-cache' })
         .then((res) => {
           caches.open(CACHE).then((c) => c.put(SCOPE, res.clone()));
           return res;
         })
         .catch(() => caches.match(SCOPE)),
     );
+    return;
+  }
+  // la page elle-même (index.html) n'est jamais servie depuis le cache quand le réseau répond
+  if (url.href === SCOPE || url.href === SCOPE + 'index.html') {
+    e.respondWith(fetch(req, { cache: 'no-cache' }).catch(() => caches.match(SCOPE)));
     return;
   }
   // Fichiers versionnés et polices : cache d'abord

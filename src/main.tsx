@@ -16,6 +16,6 @@ createRoot(document.getElementById('root')!).render(
 // Fonctionnement hors ligne une fois installée sur l'écran d'accueil
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' }).then((r) => r.update()).catch(() => {});
   });
 }
