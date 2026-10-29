@@ -40,5 +40,13 @@ export function humanDetails(details: string): string {
         return m;
       }
     })
-    .replace(/(-?\d+) c\b/g, (_, n) => formatEuros(Number(n)));
+    .replace(/(-?\d+) c\b/g, (_, n) => formatEuros(Number(n)))
+    .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1');
 }
+
+const STATUS_WORD: Record<string, string> = {
+  confirmee: 'à expédier', expediee: 'expédiée', terminee: 'terminée', annulee: 'annulée', remboursee: 'remboursée',
+  en_vente: 'en vente', a_preparer: 'à préparer', pret: 'prêt à publier', reserve: 'réservé', retire: 'retiré', perdu: 'perdu',
+};
+/** « statut → expediee (à la main) » → « statut : expédiée (à la main) ». */
+export const humanAction = (a: string) => a.replace(/statut → (\w+)/, (_, k) => `statut : ${STATUS_WORD[k] ?? k}`);

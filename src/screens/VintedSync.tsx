@@ -15,11 +15,13 @@ import { getSession, googleReady, signOut, startGoogleLogin, tokenValid } from '
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
 import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales, type SyncResult } from '../lib/vinted/sync';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, useAction, useUI } from '../ui/kit';
+import { sinceLabel, syncHealth } from '../lib/vinted/reliability';
 
 export const syncSummary = (r: SyncResult) =>
-  r.added === 0
+  (r.added === 0
     ? 'Aucun nouvel e-mail Vinted.'
-    : `${r.applied} opération${r.applied > 1 ? 's' : ''} enregistrée${r.applied > 1 ? 's' : ''}${r.inbox ? ` · ${r.inbox} à valider` : ''}.`;
+    : `${r.applied} opération${r.applied > 1 ? 's' : ''} enregistrée${r.applied > 1 ? 's' : ''}${r.inbox ? ` · ${r.inbox} à valider` : ''}.`)
+  + (r.failed ? ` ${r.failed} e-mail${r.failed > 1 ? 's' : ''} pas encore lu${r.failed > 1 ? 's' : ''} (coupure) : ${r.failed > 1 ? 'ils seront relus' : 'il sera relu'} à la prochaine synchro.` : '');
 
 // ---------------------------------------------------------------------------
 // Réglage et installation
@@ -86,10 +88,8 @@ export function VintedSyncScreen() {
           {google && <GoogleAccount />}
           <div className="card" style={google ? { marginTop: 10 } : undefined}>
             <div className="row-between"><b>{google ? 'Synchro automatique' : 'Gmail connecté'}</b><span className="badge green">Active</span></div>
-            <p className="small muted" style={{ margin: '6px 0 0' }}>
-              La synchro se fait toute seule à chaque ouverture de l'application.
-              {s.lastSyncAt && <> Dernière : {new Date(s.lastSyncAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}.</>}
-            </p>
+            <p className="small muted" style={{ margin: '6px 0 0' }}>La synchro se fait toute seule à chaque ouverture de l'application.</p>
+            <SyncStatus />
             {counts && (
               <div className="grid2" style={{ marginTop: 12 }}>
                 <div className="tile"><div className="tile-label">Enregistrées</div><div className="tile-value">{counts.applied}</div></div>
@@ -127,6 +127,9 @@ export function VintedSyncScreen() {
           {!google && (s.scriptVersion ?? 1) >= 3 && <PushSection />}
           {(google || (s.scriptVersion ?? 1) >= 3) && <DriveSection />}
           {!google && (s.scriptVersion ?? 1) >= 3 && <KeySection />}
+
+          <Unrecognized />
+          <SyncHistory />
 
           {recent && recent.length > 0 && (
             <>
@@ -713,5 +716,70 @@ function GoogleAccount() {
         }
       }}>Déconnecter</button>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fiabilité : état, e-mails non reconnus, historique
+// ---------------------------------------------------------------------------
+
+/** Dernière synchro réussie, et la dernière erreur s'il y en a une depuis. */
+export function SyncStatus() {
+  const s = useData().settings;
+  const h = syncHealth(s);
+  const last = s.syncLog?.[0];
+  return (
+    <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+      <div className="row-between small">
+        <span className="muted">Dernière synchro réussie</span>
+        <b className={h.stale ? 'warn' : ''}>{h.okAt ? sinceLabel(h.okAt) : 'jamais'}</b>
+      </div>
+      {h.failing && <div className="alert error" style={{ margin: 0, display: 'block' }}>Échec {sinceLabel(last!.at)} : {h.lastError}<div className="tiny" style={{ opacity: 0.8, marginTop: 2 }}>Rien n’est perdu : la synchro reprendra là où elle s’est arrêtée.</div></div>}
+      {!h.failing && h.partial && <div className="alert warn" style={{ margin: 0 }}>Synchro incomplète {sinceLabel(last!.at)} (coupure réseau) : les e-mails manquants seront relus à la prochaine synchro.</div>}
+    </div>
+  );
+}
+
+function Unrecognized() {
+  const rows = useLiveQuery(() => getDb().syncedEmails.filter((r) => !!r.unrecognized).toArray(), []);
+  if (!rows?.length) return null;
+  return (
+    <>
+      <h2>E-mails non reconnus <span className="h2-note">{rows.length}</span></h2>
+      <div className="alert warn">
+        Ces e-mails Vinted annoncent une opération, mais leur présentation a changé : l’appli ne sait pas encore les lire, donc rien n’a été enregistré pour eux.
+        Ils sont gardés et seront relus automatiquement après une mise à jour. En attendant, tu peux saisir l’opération à la main.
+      </div>
+      <div className="list">
+        {rows.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20).map((r) => (
+          <div key={r.id} className="li"><span className="li-main"><div className="li-title" style={{ fontSize: 14 }}>{r.title}</div><div className="li-sub">{formatDate(r.date)}</div></span></div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function SyncHistory() {
+  const log = useData().settings.syncLog ?? [];
+  const [open, setOpen] = useState(false);
+  if (!log.length) return null;
+  return (
+    <>
+      <h2>Historique des synchros</h2>
+      <div className="list">
+        {(open ? log : log.slice(0, 4)).map((r) => (
+          <div key={r.at} className="li">
+            <span className="li-main">
+              <div className="li-title" style={{ fontSize: 14 }}>{new Date(r.at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</div>
+              <div className="li-sub" style={{ whiteSpace: 'normal' }}>
+                {r.ok ? `${r.read} e-mail${r.read > 1 ? 's' : ''} lu${r.read > 1 ? 's' : ''} · ${r.applied} opération${r.applied > 1 ? 's' : ''} enregistrée${r.applied > 1 ? 's' : ''}` : r.error}
+              </div>
+            </span>
+            <span className={`badge ${r.ok ? (r.partial ? 'warn' : 'green') : 'red'}`}>{r.ok ? (r.partial ? 'Incomplète' : 'Réussie') : 'Échec'}</span>
+          </div>
+        ))}
+      </div>
+      {log.length > 4 && <button className="link" style={{ marginTop: 6 }} onClick={() => setOpen(!open)}>{open ? 'Réduire' : `Voir les ${log.length} dernières`}</button>}
+    </>
   );
 }

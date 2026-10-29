@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { go, useRoute } from './lib/router';
-import { DataContext, useData, useLiveDataset } from './lib/useData';
+import { DataContext, FullDataContext, useData, useLiveDataset } from './lib/useData';
 import { SaleBanner } from './ui/SaleBanner';
 import { IBox, IChart, IHome, IPlus, ITag, ICart, IReceipt } from './ui/icons';
 import { Sheet, UIProvider } from './ui/kit';
@@ -16,7 +16,10 @@ import { ExpenseForm, Expenses } from './screens/Expenses';
 import { Calculator } from './screens/Calculator';
 import { Treasury } from './screens/Treasury';
 import { Exports } from './screens/Exports';
-import { SettingsScreen, Journal } from './screens/Settings';
+import { SettingsScreen } from './screens/Settings';
+import { Controle, JournalScreen } from './screens/Controle';
+import { Unsold } from './screens/Unsold';
+import { Assistant } from './screens/Assistant';
 import { Onboarding } from './screens/Onboarding';
 import { Goals } from './screens/Goals';
 import { Import } from './screens/Import';
@@ -55,11 +58,13 @@ export function App() {
   // tant que les données ne sont pas chargées, l'écran de chargement (index.html) reste affiché
   if (!ds) return null;
   return (
+    <FullDataContext.Provider value={ds}>
     <DataContext.Provider value={view!}>
       <UIProvider>
         <div className="app">{BETA && !access ? <BetaGate onOpen={setAccess} /> : ds.settings.onboarded ? <AppLock><Shell /></AppLock> : <Onboarding />}</div>
       </UIProvider>
     </DataContext.Provider>
+    </FullDataContext.Provider>
   );
 }
 
@@ -97,7 +102,10 @@ function Shell() {
     case 'tresorerie': screen = <Treasury />; break;
     case 'exports': screen = <Exports />; break;
     case 'reglages': screen = <SettingsScreen />; break;
-    case 'journal': screen = <Journal />; break;
+    case 'journal': screen = <JournalScreen />; break;
+    case 'verification': screen = <Controle />; break;
+    case 'invendus': screen = <Unsold />; break;
+    case 'assistant': screen = <Assistant />; break;
     case 'objectifs': screen = <Goals />; break;
     case 'import': screen = <Import />; break;
     case 'notifications': screen = <NotificationsScreen />; break;
@@ -229,6 +237,9 @@ function useAutoSync() {
       const google = s.syncMode === 'google';
       if (!google && (!s.syncUrl || !s.syncToken)) return;
       if (s.lastSyncAt && Date.now() - Date.parse(s.lastSyncAt) < 120_000) return;
+      // après un échec, on attend un peu avant de réessayer
+      const last = s.syncLog?.[0];
+      if (last && !last.ok && Date.now() - Date.parse(last.at) < 120_000) return;
       if (google) {
         const { getSession, tokenValid, startGoogleLogin } = await import('./lib/google/auth');
         if (!tokenValid(getSession())) {

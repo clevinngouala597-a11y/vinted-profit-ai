@@ -9,7 +9,7 @@ import {
   updateItem,
 } from '../lib/actions';
 import { getDb } from '../lib/db';
-import { humanDetails } from '../lib/journal';
+import { humanAction, humanDetails } from '../lib/journal';
 import { daysBetween, estimate, itemCost, saleBreakdown } from '../lib/engine';
 import { compressImage } from '../lib/images';
 import { centsToInput, formatEuros, formatPercent } from '../lib/money';
@@ -158,7 +158,7 @@ export function ItemDetail({ id }: { id: string }) {
           <div className="list">
             {history.slice(0, 12).map((h) => (
               <div className="li" key={h.id}>
-                <span className="li-main"><div className="li-title" style={{ fontWeight: 600, fontSize: 14 }}>{h.action}</div><div className="li-sub" style={{ whiteSpace: 'normal' }}>{humanDetails(h.details)}</div></span>
+                <span className="li-main"><div className="li-title" style={{ fontWeight: 600, fontSize: 14 }}>{humanAction(h.action)}</div><div className="li-sub" style={{ whiteSpace: 'normal' }}>{humanDetails(h.details)}</div></span>
                 <span className="tiny faint">{new Date(h.at).toLocaleDateString('fr-FR')}</span>
               </div>
             ))}

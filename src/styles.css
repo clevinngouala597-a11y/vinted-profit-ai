@@ -479,3 +479,12 @@ html[data-theme='light'] .beta-badge { color: #fff; }
 .google-btn:disabled { opacity: .5; }
 .google-btn:active { transform: scale(0.97); }
 .google-dot { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #4285f4; font-weight: 900; border: 1px solid var(--line); }
+
+/* lignes de bilan cliquables (détail des opérations) */
+button.calc-row { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.calc-link > span:first-child { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.calc-link:active { opacity: 0.6; }
+
+/* assistant */
+.bubble-q { justify-self: end; max-width: 85%; background: var(--green-soft); color: var(--text); border-radius: 16px 16px 4px 16px; padding: 9px 13px; font-weight: 600; font-size: 14.5px; }
+.answer .report td, .answer .report th { white-space: nowrap; }

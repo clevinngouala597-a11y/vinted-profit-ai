@@ -89,6 +89,8 @@ export interface Settings {
   messageTemplates: Record<string, string>;
   /** Un article en vente sans bouger depuis ce nombre de jours est proposé à la republication. */
   republishDays: number;
+  /** Historique des dernières synchros (la plus récente d'abord). */
+  syncLog: { at: ISOTime; ok: boolean; partial?: boolean; read: number; added: number; applied: number; error?: string; ms: number }[];
 }
 
 export const DEFAULT_CATEGORIES = [
@@ -371,6 +373,14 @@ export interface SyncedEmail {
   pseudo?: string | null;
   /** dressing de l'e-mail (absent : principal) */
   shop?: string;
+  /** empreinte du contenu (détection des doublons) */
+  fp?: string;
+  /** l'e-mail annonce une opération mais son format n'a pas été reconnu */
+  unrecognized?: boolean;
+  /** e-mail gardé pour être relu après une mise à jour des règles de lecture (format inconnu seulement) */
+  raw?: { id: string; date: string; subject: string; text: string };
+  /** version des règles de lecture utilisée */
+  parser?: number;
 }
 
 /** Notification masquée par l'utilisateur (les notifications elles-mêmes sont recalculées). */

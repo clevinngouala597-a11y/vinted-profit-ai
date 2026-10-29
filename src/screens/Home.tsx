@@ -16,7 +16,7 @@ import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { labelList, labelsToPrint } from '../lib/vinted/labels';
 import { TrendChart } from '../ui/TrendChart';
-import { IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
+import { IBox, ICheck, ISearch, IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
 import { saveSettings } from '../lib/actions';
 import { BETA, isLocked } from '../lib/beta';
 import { isAdmin, viewAsTester } from '../lib/betaAccess';
@@ -25,6 +25,7 @@ import { useUI } from '../ui/kit';
 import { ShopSwitcher } from '../ui/ShopPicker';
 import { BigMoney, Empty, InfoButton, Money, Sheet } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
+import { sinceLabel, syncHealth } from '../lib/vinted/reliability';
 import { NotifRow, useNotifications } from './Notifications';
 
 export function Home() {
@@ -77,6 +78,7 @@ export function Home() {
       <PeriodPicker p={p} />
       {BETA && <BetaCards demo={ds.settings.demoData === true} />}
 
+      <SyncAlert />
       {toPrint.length > 0 && (
         <button className="alert warn" style={{ width: '100%', border: 0, marginTop: 12, textAlign: 'left', cursor: 'pointer' }} onClick={() => go('bordereaux')}>
           <span><b>🖨️ {toPrint.length} bordereau{toPrint.length > 1 ? 'x' : ''} à imprimer</b>{toPrint[0].urgency === 'urgent' ? ' — un est à envoyer dans moins de 24 h' : ''}</span>
@@ -175,6 +177,9 @@ export function Home() {
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         {BETA && <MenuLink icon={<IMail width={18} height={18} />} title="Donner mon avis" sub="Un bug, une idée ? Ça m'arrive directement" to="avis" close={() => setMenu(false)} />}
+        <MenuLink icon={<ISearch width={18} height={18} />} title="Assistant" sub="Pose une question : « mes 5 articles les plus rentables »" to="assistant" close={() => setMenu(false)} />
+        <MenuLink icon={<IBox width={18} height={18} />} title="Invendus" sub="Argent immobilisé, ancienneté, marge selon le prix" to="invendus" close={() => setMenu(false)} />
+        <MenuLink icon={<ICheck width={18} height={18} />} title="Vérification des comptes" sub="Chaque montant relié à son opération, contrôles" to="verification" close={() => setMenu(false)} />
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />
         <MenuLink icon={<ITag width={18} height={18} />} title="Annonce IA" sub="Titre, description et prix à partir de tes photos" to="annonce" close={() => setMenu(false)} />
         <MenuLink icon={<ITag width={18} height={18} />} title="Photos IA" sub="Prompts pour des photos réalistes" to="photos" close={() => setMenu(false)} />
@@ -291,5 +296,22 @@ function BetaCards({ demo }: { demo: boolean }) {
         <IChevron />
       </button>
     </div>
+  );
+}
+
+/** Bandeau quand la synchro échoue ou n'a pas réussi depuis longtemps. */
+function SyncAlert() {
+  const s = useData().settings;
+  if (s.syncMode !== 'google' && !(s.syncUrl && s.syncToken)) return null;
+  const h = syncHealth(s);
+  // pas encore de synchro : rien à signaler
+  if (!s.syncLog?.length) return null;
+  // en retard : aucune synchro tentée récemment (connexion Google expirée, appli hors ligne…)
+  const recentTry = Date.now() - Date.parse(s.syncLog[0].at) < 10 * 60_000;
+  if (!h.failing && !(h.stale && !recentTry)) return null;
+  return (
+    <button className="alert error" style={{ width: '100%', border: 0, marginTop: 12, textAlign: 'left', cursor: 'pointer' }} onClick={() => go('synchro')}>
+      <span><b>Synchro Vinted {h.failing ? 'en échec' : 'en retard'}</b> — dernière réussie {h.okAt ? sinceLabel(h.okAt) : 'jamais'}. Touche pour voir.</span>
+    </button>
   );
 }

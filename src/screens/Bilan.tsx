@@ -7,6 +7,8 @@ import { useData } from '../lib/useData';
 import { BarList, GoalChart, LineChart, RevenueProfitChart } from '../ui/charts';
 import { IBack, IChevron } from '../ui/icons';
 import { InfoButton, Money, PageHeader } from '../ui/kit';
+import { TraceSheet } from './Controle';
+import type { Metric } from '../lib/ledger';
 
 type View = 'jour' | 'mois' | 'annee';
 
@@ -108,6 +110,8 @@ function Month() {
   const isCurrent = anchor === monthStart(todayISO());
   const byCat = profitBy(entries, from, to, 'category');
   const byBrand = profitBy(entries, from, to, 'brand').slice(0, 6);
+  const [trace, setTrace] = useState<Metric | null>(null);
+  const open = (k: Metric) => () => setTrace(k);
 
   return (
     <>
@@ -119,22 +123,24 @@ function Month() {
 
       <h2>Compte de résultat</h2>
       <div className="calc">
-        <Row label="Chiffre d'affaires vendeur" v={m.revenue} prev={p.revenue} />
-        <Row label="Coût des articles vendus" v={-m.cogs} prev={-p.cogs} />
-        <Row label="Coûts attribuables aux ventes" v={-m.saleCosts} prev={-p.saleCosts} />
+        <Row label="Chiffre d'affaires vendeur" v={m.revenue} prev={p.revenue} onClick={open('revenue')} />
+        <Row label="Coût des articles vendus" v={-m.cogs} prev={-p.cogs} onClick={open('cogs')} />
+        <Row label="Coûts attribuables aux ventes" v={-m.saleCosts} prev={-p.saleCosts} onClick={open('saleCosts')} />
         <Row label="Bénéfice commercial" v={m.commercialProfit} prev={p.commercialProfit} total info="profit" />
-        <Row label="Dépenses générales" v={-m.general} prev={-p.general} />
-        {(m.writeOff > 0 || p.writeOff > 0) && <Row label="Articles perdus ou retirés" v={-m.writeOff} prev={-p.writeOff} />}
+        <Row label="Dépenses générales" v={-m.general} prev={-p.general} onClick={open('general')} />
+        {(m.writeOff > 0 || p.writeOff > 0) && <Row label="Articles perdus ou retirés" v={-m.writeOff} prev={-p.writeOff} onClick={open('writeOff')} />}
         <Row label="Résultat estimé" v={m.result} prev={p.result} total info="result" />
       </div>
-      <p className="tiny faint">Colonne de droite : écart avec le mois précédent. Estimation de gestion, à ne pas confondre avec ton revenu imposable.</p>
+      <p className="tiny faint">Touche une ligne pour voir les opérations qui la composent. Colonne de droite : écart avec le mois précédent. Estimation de gestion, à ne pas confondre avec ton revenu imposable.</p>
+      <button className="btn btn-ghost btn-sm" style={{ marginTop: 4 }} onClick={() => go('verification')}>Vérifier mes comptes</button>
+      <TraceSheet metric={trace} from={from} to={to} onClose={() => setTrace(null)} sign={trace === 'revenue' || trace === 'purchases' ? 1 : -1} />
 
       <h2>Semaine par semaine</h2>
       <div className="card"><RevenueProfitChart data={series(entries, buckets({ from, to }, todayISO()))} /></div>
 
       <h2>Stock et trésorerie</h2>
       <div className="calc">
-        <div className="calc-row"><span>Achats de stock du mois</span><span>{formatEuros(m.purchases)}</span></div>
+        <button className="calc-row calc-link" onClick={open('purchases')}><span>Achats de stock du mois</span><span>{formatEuros(m.purchases)}</span></button>
         <div className="calc-row"><span>Articles vendus</span><span>{m.itemsSold}</span></div>
         <div className="calc-row"><span>Stock {isCurrent ? 'actuel' : 'en fin de mois'}</span><span>{stockEnd.count} article{stockEnd.count > 1 ? 's' : ''} · {formatEuros(stockEnd.value)}</span></div>
         <div className="calc-row"><span>Trésorerie {isCurrent ? 'actuelle' : 'en fin de mois'}</span><span>{formatEuros(cashEnd.balance)}</span></div>
@@ -158,16 +164,17 @@ function Month() {
   );
 }
 
-function Row({ label, v, prev, total, info }: { label: string; v: number; prev: number; total?: boolean; info?: string }) {
+function Row({ label, v, prev, total, info, onClick }: { label: string; v: number; prev: number; total?: boolean; info?: string; onClick?: () => void }) {
   const d = v - prev;
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className={`calc-row ${total ? 'total' : ''}`}>
+    <Tag className={`calc-row ${total ? 'total' : ''} ${onClick ? 'calc-link' : ''}`} onClick={onClick} aria-label={onClick ? `${label} : voir le détail` : undefined}>
       <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>{label}{info && <InfoButton k={info} />}</span>
       <span style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
         <span className={total ? (v < 0 ? 'neg' : v > 0 ? 'pos' : '') : ''}>{formatEuros(v)}</span>
         <span className={`tiny ${d > 0 ? 'pos' : d < 0 ? 'neg' : 'faint'}`} style={{ minWidth: 62, textAlign: 'right' }}>{d === 0 ? '=' : formatEuros(d, { signed: true })}</span>
       </span>
-    </div>
+    </Tag>
   );
 }
 

@@ -10,6 +10,7 @@ import { ORDER_LABEL } from '../lib/types';
 import type { SaleStatusChoice } from '../lib/actions';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, Sheet, Thumb, useAction, useUI } from '../ui/kit';
 import { orderBadge } from './Sales';
+import { SaleHistory } from './Controle';
 
 export function SaleDetail({ id }: { id: string }) {
   const ds = useData();
@@ -125,6 +126,8 @@ export function SaleDetail({ id }: { id: string }) {
         <dt>Clôture</dt><dd>{formatDate(sale.closedAt)}</dd>
         {sale.notes && <><dt>Notes</dt><dd style={{ textAlign: 'left', fontWeight: 400, whiteSpace: 'pre-wrap' }}>{sale.notes}</dd></>}
       </dl>
+
+      <SaleHistory saleId={id} />
 
       <button className="btn btn-ghost" style={{ marginTop: 12, width: '100%' }} onClick={() => setFixOpen(true)}>✏️ Modifier la vente</button>
       {fixOpen && <EditSaleSheet saleId={id} onClose={() => setFixOpen(false)} />}

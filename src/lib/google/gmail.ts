@@ -4,7 +4,7 @@
  * bordereaux) reste identique.
  */
 import type { RawEmail } from '../vinted/parse';
-import { SyncError } from '../vinted/errors';
+import { SyncError, TransientSyncError, withRetry } from '../vinted/errors';
 import { getSession, tokenValid } from './auth';
 import { GMAIL_QUERY } from './config';
 
@@ -14,18 +14,22 @@ export class GoogleAuthNeeded extends SyncError {
   constructor() { super('Ta connexion Google a expiré : touche « Se reconnecter ».'); }
 }
 
-async function call<T>(path: string, fetcher: typeof fetch): Promise<T> {
+/** Appel à l'API Gmail, retenté automatiquement en cas de coupure ou de surcharge passagère. */
+const call = <T,>(path: string, fetcher: typeof fetch): Promise<T> => withRetry(() => callOnce<T>(path, fetcher));
+
+async function callOnce<T>(path: string, fetcher: typeof fetch): Promise<T> {
   const s = getSession();
   if (!tokenValid(s)) throw new GoogleAuthNeeded();
   let res: Response;
   try {
     res = await fetcher(`${API}${path}`, { headers: { Authorization: `Bearer ${s!.token}` } });
   } catch {
-    throw new SyncError('Impossible de joindre Gmail : vérifie ta connexion internet.');
+    throw new TransientSyncError('Impossible de joindre Gmail : vérifie ta connexion internet.');
   }
   if (res.status === 401) throw new GoogleAuthNeeded();
   if (res.status === 403) throw new SyncError('Gmail refuse l’accès : reconnecte-toi et accepte la lecture de tes e-mails.');
-  if (res.status === 429) throw new SyncError('Trop de lectures Gmail d’un coup : réessaie dans quelques minutes.');
+  if (res.status === 429) throw new TransientSyncError('Trop de lectures Gmail d’un coup : réessaie dans quelques minutes.');
+  if (res.status >= 500) throw new TransientSyncError(`Gmail est momentanément indisponible (${res.status}) : réessaie dans quelques minutes.`);
   if (!res.ok) throw new SyncError(`Gmail a répondu avec une erreur (${res.status}).`);
   return res.json() as Promise<T>;
 }
@@ -73,8 +77,21 @@ export function messageToRaw(m: Msg): RawEmail {
   return { id: m.id, date: new Date(Number(m.internalDate ?? Date.now())).toISOString(), subject, text: nettoyer(text) };
 }
 
-/** Tous les e-mails Vinted utiles depuis `since` (AAAA-MM-JJ). */
-export async function fetchGmailVinted(since: string, fetcher: typeof fetch = fetch, max = 500): Promise<RawEmail[]> {
+export interface GmailFetch {
+  emails: RawEmail[];
+  /** e-mails trouvés mais pas encore lus (coupure en cours de route) : ils seront relus à la prochaine synchro */
+  failed: number;
+  /** e-mails déjà enregistrés, pas relus */
+  skipped: number;
+}
+
+/**
+ * Tous les e-mails Vinted utiles depuis `since` (AAAA-MM-JJ).
+ * Les e-mails déjà enregistrés (`known`) ne sont pas retéléchargés. Si la lecture d'un e-mail échoue
+ * malgré les nouvelles tentatives, les autres sont quand même rendus : la synchro reprend là où elle
+ * s'est arrêtée au lieu de tout perdre.
+ */
+export async function fetchGmailVinted(since: string, fetcher: typeof fetch = fetch, max = 500, known: Set<string> = new Set()): Promise<GmailFetch> {
   const ids: string[] = [];
   let page: string | undefined;
   const q = encodeURIComponent(`${GMAIL_QUERY} after:${since.replace(/-/g, '/')}`);
@@ -83,13 +100,19 @@ export async function fetchGmailVinted(since: string, fetcher: typeof fetch = fe
     ids.push(...(r.messages ?? []).map((m) => m.id));
     page = r.nextPageToken;
   } while (page && ids.length < max);
+  const todo = [...new Set(ids)].filter((id) => !known.has(id));
   const out: RawEmail[] = [];
+  let failed = 0;
   // 5 lectures à la fois : rapide sans dépasser les limites de Gmail
-  for (let i = 0; i < ids.length; i += 5) {
-    const batch = await Promise.all(ids.slice(i, i + 5).map((id) => call<Msg>(`/messages/${id}?format=full`, fetcher)));
-    out.push(...batch.map(messageToRaw));
+  for (let i = 0; i < todo.length; i += 5) {
+    const batch = await Promise.allSettled(todo.slice(i, i + 5).map((id) => call<Msg>(`/messages/${id}?format=full`, fetcher)));
+    for (const b of batch) {
+      if (b.status === 'fulfilled') out.push(messageToRaw(b.value));
+      else if (b.reason instanceof GoogleAuthNeeded) throw b.reason;
+      else failed++;
+    }
   }
-  return out;
+  return { emails: out, failed, skipped: ids.length - todo.length };
 }
 
 /** PDF des bordereaux (même réponse que l'action « bordereaux » du script). */

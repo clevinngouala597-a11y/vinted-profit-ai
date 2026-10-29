@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { defaultShopFor } from '../lib/shops';
 import { ShopField } from '../ui/ShopPicker';
 import { recordPurchase, savePhoto } from '../lib/actions';
-import { splitPurchase } from '../lib/engine';
+import { LOT_SPLIT_LABEL, splitPurchase, type LotSplit } from '../lib/engine';
 import { compressImage } from '../lib/images';
 import { formatEuros, parseEuros } from '../lib/money';
 import { todayISO } from '../lib/period';
@@ -40,6 +40,7 @@ export function PurchaseForm() {
   const [payment, setPayment] = useState('');
   const [mode, setMode] = useState<'unit' | 'lot'>('unit');
   const [lotPrice, setLotPrice] = useState('');
+  const [lotSplit, setLotSplit] = useState<LotSplit>('souhaite');
   const [fees, setFees] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<Line[]>([newLine()]);
@@ -51,7 +52,10 @@ export function PurchaseForm() {
     lines.map((l) => ({ price: centsOrNull(l.price), targetPrice: centsOrNull(l.target) })),
     cents(fees),
     mode === 'lot' ? cents(lotPrice) : null,
+    lotSplit,
   );
+  const manual = mode === 'lot' && lotSplit === 'manuel';
+  const manualLeft = manual ? cents(lotPrice) - lines.reduce((a, l) => a + cents(l.price), 0) : 0;
   const total = split.reduce((a, s) => a + s.price + s.fees, 0);
   const budget = ds.settings.maxPurchaseBudget;
 
@@ -61,9 +65,10 @@ export function PurchaseForm() {
     const res = await run(async () => {
       if (fees.trim() && parseEuros(fees) === null) throw new Error('Les frais ne sont pas un montant valide.');
       if (mode === 'lot' && parseEuros(lotPrice) === null) throw new Error('Indique le prix payé pour le lot.');
+      if (manual && manualLeft !== 0) throw new Error(`La somme des parts doit faire le prix du lot (${manualLeft > 0 ? `il reste ${formatEuros(manualLeft)} à répartir` : `${formatEuros(-manualLeft)} de trop`}).`);
       for (const [i, l] of lines.entries()) {
         if (!l.name.trim()) throw new Error(`Article ${i + 1} : indique un nom.`);
-        if (mode === 'unit' && parseEuros(l.price) === null) throw new Error(`Article ${i + 1} : indique le prix payé.`);
+        if ((mode === 'unit' || manual) && parseEuros(l.price) === null) throw new Error(`Article ${i + 1} : indique ${manual ? 'sa part du lot' : 'le prix payé'}.`);
         if (l.target.trim() && parseEuros(l.target) === null) throw new Error(`Article ${i + 1} : le prix souhaité n'est pas valide.`);
       }
       const withPhotos = [];
@@ -72,12 +77,12 @@ export function PurchaseForm() {
         for (const b of l.photos) ids.push(await savePhoto(b));
         withPhotos.push({
           name: l.name, category: l.category, brand: l.brand, size: l.size, condition: l.condition,
-          price: mode === 'unit' ? parseEuros(l.price) : null, targetPrice: centsOrNull(l.target), status: l.status, photoIds: ids,
+          price: mode === 'unit' || manual ? parseEuros(l.price) : null, targetPrice: centsOrNull(l.target), status: l.status, photoIds: ids,
         });
       }
       return recordPurchase({
         date, source, paymentMethod: payment, commonFees: cents(fees),
-        lotPrice: mode === 'lot' ? cents(lotPrice) : null, notes, lines: withPhotos, shop,
+        lotPrice: mode === 'lot' ? cents(lotPrice) : null, lotSplit, notes, lines: withPhotos, shop,
       });
     });
     if (res) {
@@ -96,7 +101,7 @@ export function PurchaseForm() {
         <Field label="Date"><input type="date" className="input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Source">
           <input className="input" list="sources" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Vinted, friperie…" />
-          <datalist id="sources">{['Vinted', 'Friperie', 'Vide-grenier', 'Emmaüs', 'Leboncoin', ...sources].map((s) => <option key={s} value={s} />)}</datalist>
+          <datalist id="sources">{[...new Set(['Vinted', 'Friperie', 'Vide-grenier', 'Emmaüs', 'Leboncoin', ...sources])].map((s) => <option key={s} value={s} />)}</datalist>
         </Field>
       </div>
 
@@ -109,7 +114,19 @@ export function PurchaseForm() {
         {mode === 'lot' && <Field label="Prix du lot"><MoneyInput value={lotPrice} onChange={setLotPrice} /></Field>}
         <Field label="Frais d'achat" hint="Livraison, protection acheteur, trajet…"><MoneyInput value={fees} onChange={setFees} /></Field>
       </div>
-      {mode === 'lot' && <p className="tiny muted" style={{ marginTop: -4 }}>Le prix du lot est réparti selon le prix de vente souhaité de chaque article (à parts égales s'il manque un prix). Les frais suivent la même logique.</p>}
+      {mode === 'lot' && (
+        <>
+          <Field label="Répartir le prix du lot">
+            <select className="input" value={lotSplit} onChange={(e) => setLotSplit(e.target.value as LotSplit)}>
+              {(Object.keys(LOT_SPLIT_LABEL) as LotSplit[]).map((k) => <option key={k} value={k}>{LOT_SPLIT_LABEL[k]}</option>)}
+            </select>
+          </Field>
+          <p className="tiny muted" style={{ marginTop: -4 }}>
+            {lotSplit === 'souhaite' ? 'Un article qui se revend plus cher porte une plus grande part du lot (parts égales s’il manque un prix souhaité).' : lotSplit === 'egal' ? 'Chaque article porte la même part du lot.' : 'Indique la part de chaque article : leur somme doit faire le prix du lot.'} Les frais d’achat suivent la même répartition. Le coût de chaque article est affiché en haut de sa fiche.
+          </p>
+          {manual && cents(lotPrice) > 0 && <div className={`alert ${manualLeft === 0 ? 'ok' : 'warn'}`}>{manualLeft === 0 ? 'Le lot est entièrement réparti.' : manualLeft > 0 ? `Reste ${formatEuros(manualLeft)} à répartir.` : `${formatEuros(-manualLeft)} de trop.`}</div>}
+        </>
+      )}
 
       <h2>Articles <span className="h2-note">{lines.length}</span></h2>
       {lines.map((l, i) => (
@@ -135,7 +152,7 @@ export function PurchaseForm() {
                 <option value="">—</option>{CONDITIONS.map((c) => <option key={c}>{c}</option>)}
               </select>
             </Field>
-            {mode === 'unit' && <Field label="Prix payé"><MoneyInput value={l.price} onChange={(v) => update(l.key, { price: v })} /></Field>}
+            {(mode === 'unit' || manual) && <Field label={manual ? 'Part du lot' : 'Prix payé'}><MoneyInput value={l.price} onChange={(v) => update(l.key, { price: v })} /></Field>}
             <Field label="Prix souhaité" hint={mode === 'lot' ? 'Sert aussi à répartir le lot' : undefined}><MoneyInput value={l.target} onChange={(v) => update(l.key, { target: v })} /></Field>
           </div>
           <Field label="Statut de départ">

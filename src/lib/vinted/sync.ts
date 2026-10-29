@@ -41,7 +41,8 @@ const now = () => new Date().toISOString();
 // Récupération
 // ---------------------------------------------------------------------------
 
-import { SyncError } from './errors';
+import { SyncError, TransientSyncError, withRetry } from './errors';
+import { announcesOperation, fingerprint, PARSER_VERSION, SYNC_LOG_SIZE, type SyncRun } from './reliability';
 export { SyncError };
 
 export interface ScriptReply {
@@ -60,8 +61,9 @@ export async function fetchVintedEmails(url: string, token: string, since: ISODa
   try {
     res = await fetcher(u, { method: 'GET', redirect: 'follow' });
   } catch {
-    throw new SyncError('Impossible de joindre le script Google : pas de connexion internet, ou limite Gmail du jour atteinte (elle se réinitialise en 24 h).');
+    throw new TransientSyncError('Impossible de joindre le script Google : pas de connexion internet, ou limite Gmail du jour atteinte (elle se réinitialise en 24 h).');
   }
+  if (res.status >= 500 || res.status === 429) throw new TransientSyncError(`Le script Google est momentanément indisponible (${res.status}) : réessaie dans quelques minutes.`);
   if (!res.ok) throw new SyncError(`Le script Google a répondu avec une erreur (${res.status}). Vérifie qu'il est déployé en « Application Web » accessible à « Tout le monde ».`);
   let body: { error?: string; messages?: RawEmail[]; version?: number; notifications?: boolean; sujet?: string };
   try {
@@ -198,17 +200,33 @@ export function guessCategory(title: string): string {
 // Lecture et application
 // ---------------------------------------------------------------------------
 
-/** Enregistre les e-mails non encore lus. Renvoie le nombre de nouveaux événements utiles. */
+export const FORMAT_INCONNU = 'Format d’e-mail non reconnu : il sera relu après une mise à jour de l’appli';
+const doublonDe = (d: ISODate) => `Doublon d’un e-mail déjà lu (${d.split('-').reverse().join('/')})`;
+
+/**
+ * Enregistre les e-mails non encore lus. Renvoie le nombre de nouveaux événements utiles.
+ *  - un e-mail déjà lu (même identifiant) n'est jamais relu ;
+ *  - un e-mail identique à un autre (reçu deux fois) est écarté comme doublon ;
+ *  - un e-mail qui annonce une opération mais dont la lecture échoue (Vinted a changé son format) est
+ *    gardé de côté, signalé, et relu automatiquement quand les règles de lecture sont mises à jour.
+ */
 export async function ingestEmails(emails: RawEmail[]): Promise<number> {
   const db = getDb();
-  const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
+  const rows = await db.syncedEmails.toArray();
+  const known = new Set(rows.map((e) => e.id));
+  const prints = new Map(rows.filter((r) => r.fp).map((r) => [r.fp!, r]));
   const settings = (await loadDataset()).settings;
   let added = 0;
   for (const e of emails) {
     if (known.has(e.id)) continue;
     known.add(e.id);
-    const ev = parseVintedEmail(e);
-    await db.syncedEmails.put({
+    const fp = fingerprint(e);
+    const twin = prints.get(fp);
+    const ev = twin ? null : parseVintedEmail(e);
+    const unknownFormat = !twin && !ev && announcesOperation(e.subject);
+    const pseudo = extractPseudo(e.text);
+    const shop = shopForPseudo(settings, pseudo);
+    const row: SyncedEmail = {
       id: e.id,
       kind: ev?.kind ?? 'autre',
       date: ev?.date ?? e.date.slice(0, 10),
@@ -217,17 +235,42 @@ export async function ingestEmails(emails: RawEmail[]): Promise<number> {
       // un e-mail sans intérêt est mémorisé pour ne pas être relu à chaque synchro
       status: ev ? 'waiting' : 'ignored',
       ref: null,
-      note: ev ? '' : 'E-mail sans opération à enregistrer',
+      note: twin ? doublonDe(twin.date) : unknownFormat ? FORMAT_INCONNU : ev ? '' : 'E-mail sans opération à enregistrer',
       createdAt: now(),
       resolvedAt: null,
+      fp,
+      ...(unknownFormat ? { unrecognized: true, raw: e, parser: PARSER_VERSION } : {}),
       // « Bonjour <pseudo> » : range l'e-mail dans le bon dressing
-      pseudo: extractPseudo(e.text),
-      ...(shopForPseudo(settings, extractPseudo(e.text)) !== MAIN ? { shop: shopForPseudo(settings, extractPseudo(e.text)) } : {}),
-    });
+      pseudo,
+      ...(shop !== MAIN ? { shop } : {}),
+    };
+    await db.syncedEmails.put(row);
+    if (!twin) prints.set(fp, row);
     if (ev) added++;
   }
   return added;
 }
+
+/** Relit les e-mails au format inconnu avec les règles de lecture actuelles. Renvoie le nombre de récupérés. */
+export async function reparseUnrecognized(): Promise<number> {
+  const db = getDb();
+  let fixed = 0;
+  for (const r of await db.syncedEmails.filter((x) => !!x.unrecognized && !!x.raw).toArray()) {
+    if ((r.parser ?? 0) >= PARSER_VERSION) continue;
+    const ev = parseVintedEmail(r.raw!);
+    if (!ev) { await db.syncedEmails.update(r.id, { parser: PARSER_VERSION }); continue; }
+    await db.syncedEmails.update(r.id, {
+      kind: ev.kind, date: ev.date, title: 'title' in ev ? ev.title : ev.kind === 'invoice' ? ev.label : r.title, event: ev,
+      status: 'waiting', note: '', unrecognized: false, raw: undefined, parser: PARSER_VERSION,
+    });
+    fixed++;
+  }
+  return fixed;
+}
+
+/** Montant qui mérite un coup d'œil avant d'être enregistré (nul, négatif ou très élevé). */
+export const UNUSUAL_AMOUNT = 300_000;
+const unusual = (c: Cents | null) => c !== null && (c <= 0 || c > UNUSUAL_AMOUNT);
 
 type Outcome = { status: SyncedEmail['status']; ref?: string | null; note: string };
 
@@ -303,8 +346,12 @@ async function applyEvent(row: SyncedEmail, ev: VintedEvent, today: ISODate, aut
   }
   switch (ev.kind) {
     case 'sale': {
+      if (unusual(ev.amount)) return { status: 'inbox', note: `Montant inhabituel (${(ev.amount / 100).toFixed(2).replace('.', ',')} €) : vérifie l’e-mail avant de l’enregistrer.` };
+      // ventes déjà rattachées à un autre e-mail de vente : jamais comptées deux fois, mais deux articles
+      // identiques vendus le même jour restent deux ventes
+      const taken = new Set((await getDb().syncedEmails.toArray()).filter((r) => r.kind === 'sale' && r.id !== row.id && r.status === 'applied' && r.ref).map((r) => r.ref!));
       // déjà saisie à la main (même article, à quelques jours près) ?
-      const manual = findSale(ds, ev.title, (s) => s.orderStatus !== 'annulee' && Math.abs(daysBetween(s.date, ev.date)) <= 3);
+      const manual = findSale(ds, ev.title, (s) => s.orderStatus !== 'annulee' && !taken.has(s.id) && Math.abs(daysBetween(s.date, ev.date)) <= 3);
       if (manual) return { status: 'applied', ref: manual.id, note: 'Vente déjà enregistrée' };
       // ni paiement ni annulation depuis longtemps : vente remboursée (Vinted n'envoie pas toujours d'e-mail)
       if (auto && !pairing.closedBy.has(row.id) && daysBetween(ev.date, today) >= NO_PAYMENT_DAYS) return { status: 'ignored', note: SKIPPED };
@@ -320,6 +367,7 @@ async function applyEvent(row: SyncedEmail, ev: VintedEvent, today: ISODate, aut
     }
 
     case 'completed': {
+      if (unusual(ev.amount)) return { status: 'inbox', note: `Montant viré inhabituel (${((ev.amount ?? 0) / 100).toFixed(2).replace('.', ',')} €) : vérifie l’e-mail.` };
       if (linked) {
         if (linked.orderStatus === 'annulee') {
           // paiement arrivé après une annulation automatique : la vente est réenregistrée, payée
@@ -489,6 +537,10 @@ export interface SyncResult {
   waiting: number;
   /** ventes récentes (3 derniers jours) découvertes par cette synchro */
   newSales: { id: string; title: string; amount: number | null; recorded: boolean }[];
+  /** e-mails trouvés mais pas lus (coupure) : relus à la prochaine synchro */
+  failed: number;
+  /** e-mails au format inconnu (en attente d'une mise à jour) */
+  unrecognized: number;
 }
 
 /** Au-delà, une vente découverte (import de l'historique) ne déclenche pas d'alerte. */
@@ -498,8 +550,25 @@ const ALERT_DAYS = 3;
 let inflight: Promise<SyncResult> | null = null;
 
 export function syncNow(fetcher: typeof fetch = fetch, today: ISODate = new Date().toISOString().slice(0, 10)): Promise<SyncResult> {
-  if (!inflight) inflight = runSync(fetcher, today).finally(() => { inflight = null; });
+  if (!inflight) inflight = loggedSync(fetcher, today).finally(() => { inflight = null; });
   return inflight;
+}
+
+/** Chaque synchro (réussie, partielle ou en échec) est inscrite dans l'historique des synchros. */
+async function loggedSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResult> {
+  const t0 = Date.now();
+  const log = async (run: Omit<SyncRun, 'at' | 'ms'>) => {
+    const prev = (await loadDataset()).settings.syncLog ?? [];
+    await saveSettings({ syncLog: [{ ...run, at: now(), ms: Date.now() - t0 }, ...prev].slice(0, SYNC_LOG_SIZE) });
+  };
+  try {
+    const r = await runSync(fetcher, today);
+    await log({ ok: true, ...(r.failed ? { partial: true } : {}), read: r.read, added: r.added, applied: r.applied });
+    return r;
+  } catch (e) {
+    await log({ ok: false, read: 0, added: 0, applied: 0, error: e instanceof Error ? e.message : 'Erreur inattendue' }).catch(() => {});
+    throw e;
+  }
 }
 
 const IMG = /\[image:[^\]]*\]/gi;
@@ -531,24 +600,28 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
   // seuls les e-mails des derniers jours sont relus (les plus anciens sont déjà enregistrés).
   const incremental = ds.settings.lastSyncAt && ds.settings.syncedFrom === since;
   const from = incremental ? maxDate(since, addDays(ds.settings.lastSyncAt!.slice(0, 10), -INCREMENTAL_DAYS)) : since;
+  const db = getDb();
+  const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
   let emails: RawEmail[];
+  let failed = 0;
   if (google) {
-    // connexion Google : lecture directe de Gmail depuis le téléphone
+    // connexion Google : lecture directe de Gmail depuis le téléphone (e-mails déjà lus non retéléchargés)
     const { fetchGmailVinted } = await import('../google/gmail');
-    emails = await fetchGmailVinted(from, fetcher);
-    if (!incremental) await saveSettings({ syncedFrom: since });
+    const r = await fetchGmailVinted(from, fetcher, 500, known);
+    emails = r.emails;
+    failed = r.failed;
   } else {
-    const reply = await fetchVintedEmails(syncUrl, syncToken, from, fetcher);
-    if (!incremental) await saveSettings({ syncedFrom: since });
+    const reply = await withRetry(() => fetchVintedEmails(syncUrl, syncToken, from, fetcher));
     emails = reply.messages;
     if (reply.version !== ds.settings.scriptVersion || reply.notifications !== ds.settings.scriptNotifications || (reply.topic && reply.topic !== ds.settings.ntfyTopic))
       await saveSettings({ scriptVersion: reply.version, scriptNotifications: reply.notifications, ...(reply.topic ? { ntfyTopic: reply.topic } : {}) });
   }
-  const db = getDb();
-  const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
+  // chaque e-mail est enregistré dès sa lecture : une coupure ne fait rien perdre
   const added = await ingestEmails(emails.filter((e) => e.date.slice(0, 10) >= since));
+  await reparseUnrecognized();
   const s = await processPending(today);
-  await saveSettings({ lastSyncAt: now() });
+  // la synchro n'est « réussie » que si tout a été lu : sinon, la prochaine reprend au même point
+  if (!failed) await saveSettings({ lastSyncAt: now(), ...(incremental ? {} : { syncedFrom: since }) });
   const inbox = await db.syncedEmails.where('status').equals('inbox').count();
   const fresh = (await db.syncedEmails.where('date').aboveOrEqual(addDays(today, -ALERT_DAYS)).toArray())
     .filter((r) => r.kind === 'sale' && !known.has(r.id) && r.status !== 'ignored')
@@ -557,5 +630,6 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
     id: r.id, title: r.title, amount: (r.event as VintedEvent & { kind: 'sale' }).amount, recorded: r.status === 'applied',
   }));
   if (ds.settings.saleAlert !== false) announceSales(newSales);
-  return { read: emails.length, added, applied: s.applied, inbox, waiting: s.waiting, newSales };
+  const unrecognized = await db.syncedEmails.filter((r) => !!r.unrecognized).count();
+  return { read: emails.length, added, applied: s.applied, inbox, waiting: s.waiting, newSales, failed, unrecognized };
 }

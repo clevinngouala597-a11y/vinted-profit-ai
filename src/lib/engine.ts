@@ -78,9 +78,19 @@ export function splitSale(
   return items.map((i, k) => ({ itemId: i.id, revenue: rev[k], costs: costs[k], cogs: itemCost(i) }));
 }
 
+export type LotSplit = 'souhaite' | 'egal' | 'manuel';
+export const LOT_SPLIT_LABEL: Record<LotSplit, string> = {
+  souhaite: 'Selon le prix de vente souhaité',
+  egal: 'À parts égales',
+  manuel: 'Montant par article',
+};
+
 /**
  * Répartit un achat (éventuellement un lot) entre ses articles.
- *  - Si `lotPrice` est fourni : le prix du lot est réparti au prorata des prix de vente souhaités (à défaut, à parts égales).
+ *  - Si `lotPrice` est fourni, le prix du lot est réparti selon `method` :
+ *      souhaite : au prorata des prix de vente souhaités (à parts égales s'il en manque un) ;
+ *      egal : à parts égales ;
+ *      manuel : chaque ligne garde le montant saisi (la somme doit être égale au prix du lot).
  *  - Sinon chaque ligne garde son prix.
  *  - Les frais communs sont répartis au prorata du prix attribué (à défaut, à parts égales).
  */
@@ -88,11 +98,12 @@ export function splitPurchase(
   lines: { price: Cents | null; targetPrice: Cents | null }[],
   commonFees: Cents,
   lotPrice: Cents | null,
+  method: LotSplit = 'souhaite',
 ): { price: Cents; fees: Cents }[] {
   // un article sans prix souhaité ne doit pas recevoir un coût nul : dans ce cas, parts égales pour tout le lot
   const targets = lines.map((l) => l.targetPrice ?? 0);
-  const lotWeights = targets.every((t) => t > 0) ? targets : lines.map(() => 1);
-  const prices = lotPrice !== null ? allocate(lotPrice, lotWeights) : lines.map((l) => l.price ?? 0);
+  const lotWeights = method === 'souhaite' && targets.every((t) => t > 0) ? targets : lines.map(() => 1);
+  const prices = lotPrice === null || method === 'manuel' ? lines.map((l) => l.price ?? 0) : allocate(lotPrice, lotWeights);
   const fees = allocate(commonFees, prices);
   return prices.map((p, k) => ({ price: p, fees: fees[k] }));
 }
@@ -171,6 +182,19 @@ export interface PLEntry {
   itemsSold: number; // articles vendus (+) ou récupérés (−)
   category?: string;
   brand?: string;
+  /** opération d'origine : chaque montant du bilan peut être relié à sa source */
+  src: SourceRef;
+}
+
+export type SourceType = 'sale' | 'refund' | 'expense' | 'item' | 'purchase';
+export interface SourceRef {
+  type: SourceType;
+  /** identifiant de l'enregistrement (pour un remboursement : celui du remboursement) */
+  id: string;
+  /** vente concernée (ventes et remboursements) */
+  saleId?: string;
+  itemId?: string;
+  label: string;
 }
 
 export function plEntries(ds: Dataset): PLEntry[] {
@@ -182,7 +206,7 @@ export function plEntries(ds: Dataset): PLEntry[] {
   for (const sale of ds.sales) {
     const saleCostsTotal = sale.platformFees + sale.packagingCost + sale.otherCosts;
     if (sale.orderStatus === 'annulee') {
-      if (saleCostsTotal) out.push({ ...zero, date: sale.cancelledAt ?? sale.date, general: saleCostsTotal });
+      if (saleCostsTotal) out.push({ ...zero, date: sale.cancelledAt ?? sale.date, general: saleCostsTotal, src: { type: 'sale', id: sale.id, saleId: sale.id, label: 'Frais d’une vente annulée' } });
       continue;
     }
     const lines = ds.saleLines.filter((l) => l.saleId === sale.id);
@@ -199,6 +223,7 @@ export function plEntries(ds: Dataset): PLEntry[] {
         itemsSold: 1,
         category: it?.category,
         brand: it?.brand,
+        src: { type: 'sale', id: sale.id, saleId: sale.id, itemId: l.itemId, label: `Vente · ${it?.name ?? 'article'}` },
       });
     });
     for (const r of ds.refunds.filter((x) => x.saleId === sale.id)) {
@@ -208,7 +233,7 @@ export function plEntries(ds: Dataset): PLEntry[] {
       const extra = allocate(r.extraCosts, w);
       lines.forEach((l, k) => {
         const it = itemById.get(l.itemId);
-        out.push({ ...zero, date: r.date, revenue: -back[k], saleCosts: extra[k], category: it?.category, brand: it?.brand });
+        out.push({ ...zero, date: r.date, revenue: -back[k], saleCosts: extra[k], category: it?.category, brand: it?.brand, src: { type: 'refund', id: r.id, saleId: sale.id, itemId: l.itemId, label: `Remboursement · ${it?.name ?? 'article'}` } });
       });
       if (r.itemRecovered) {
         lines.forEach((l) => {
@@ -220,6 +245,7 @@ export function plEntries(ds: Dataset): PLEntry[] {
             itemsSold: -1,
             category: it?.category,
             brand: it?.brand,
+            src: { type: 'refund', id: r.id, saleId: sale.id, itemId: l.itemId, label: `Article récupéré · ${it?.name ?? 'article'}` },
           });
         });
       }
@@ -229,12 +255,12 @@ export function plEntries(ds: Dataset): PLEntry[] {
   for (const e of ds.expenses) {
     const linkedSale = e.saleId ? saleById.get(e.saleId) : undefined;
     const direct = linkedSale && linkedSale.orderStatus !== 'annulee';
-    out.push({ ...zero, date: e.date, saleCosts: direct ? e.amount : 0, general: direct ? 0 : e.amount });
+    out.push({ ...zero, date: e.date, saleCosts: direct ? e.amount : 0, general: direct ? 0 : e.amount, src: { type: 'expense', id: e.id, ...(direct ? { saleId: e.saleId! } : {}), label: `${e.category}${e.supplier || e.description ? ` · ${e.supplier || e.description}` : ''}` } });
   }
 
   for (const i of ds.items) {
     if ((i.status === 'perdu' || i.status === 'retire') && i.writtenOffAt) {
-      out.push({ ...zero, date: i.writtenOffAt, writeOff: itemCost(i), category: i.category, brand: i.brand });
+      out.push({ ...zero, date: i.writtenOffAt, writeOff: itemCost(i), category: i.category, brand: i.brand, src: { type: 'item', id: i.id, itemId: i.id, label: `${i.status === 'perdu' ? 'Perdu' : 'Retiré'} · ${i.name}` } });
     }
   }
   return out;

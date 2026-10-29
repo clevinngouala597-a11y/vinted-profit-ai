@@ -102,6 +102,16 @@ Par défaut, la synchro se fait avec **« Se connecter avec Google »** : redire
 - **Librairies** : `npm audit` (failles hautes ou critiques) bloque le déploiement ; Dependabot propose les mises à jour chaque semaine.
 - **À faire de son côté** : validation en deux étapes sur les comptes Google et GitHub, ne pas partager de capture de l'écran Synchro.
 
+### Comptabilité vérifiable, invendus, assistant
+
+- **Vérification des comptes** (`#/verification`) : 10 contrôles automatiques — chaque écriture reliée à une opération, ventes réparties entre leurs articles, ventes et achats rapprochés de la trésorerie au centime, coût de chaque article justifié par ses achats, prix d'achat manquants, mouvements orphelins, doublons possibles, écarts avec les montants des e-mails Vinted, paiements en retard. Chaque anomalie renvoie vers l'opération concernée (`src/lib/ledger.ts`).
+- **D'où vient ce montant ?** : dans le bilan, chaque ligne s'ouvre sur la liste des opérations qui la composent ; la somme des lignes est exactement le montant affiché.
+- **Journal** filtrable (corrections, remboursements, paiements et statuts, créations) et **historique de chaque vente** (journal + e-mails Vinted rapprochés).
+- **Synchro fiable** : doublons d'e-mails écartés (empreinte du contenu), deux ventes identiques à des heures différentes restent deux ventes, e-mails au format inconnu signalés et relus après mise à jour, nouvelles tentatives automatiques (coupure, 429, 5xx), reprise après interruption sans tout retélécharger, montants inhabituels mis de côté, historique des synchros et indicateur de dernière synchro réussie (bandeau sur l'accueil en cas d'échec).
+- **Invendus** (`#/invendus`) : argent immobilisé, ancienneté, articles qui dorment (plus de deux fois le délai de vente habituel), marge à plusieurs prix (souhaité, −10/−20/−30 %, minimum, sans perte) et simulation d'un prix libre.
+- **Assistant** (`#/assistant`) : questions en français (« mes cinq articles les plus rentables », « combien j'ai gagné le mois dernier »…), réponses calculées sur l'appareil avec le moteur du bilan, chaque réponse indique sur quoi elle repose. Une question non comprise reçoit des suggestions, jamais un chiffre approximatif. Avec une clé Claude, une question libre est reformulée par l'IA (seul le texte de la question est envoyé).
+- **Gestion avancée** : lots répartis selon le prix souhaité, à parts égales ou par montant saisi ; coûts payés après coup répartis sur plusieurs articles du stock ; comparaison des dressings dans les statistiques ; exports personnalisés (tableaux, période, dressing, Excel ou CSV) et préparation comptable en un toucher.
+
 ## Pas encore disponible
 
 Rien de ce qui suit n'est simulé dans l'application : ces fonctions sont simplement absentes.

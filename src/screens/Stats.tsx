@@ -6,6 +6,7 @@ import { sellerStats, type Group } from '../lib/stats';
 import { useData } from '../lib/useData';
 import { Empty, Money, PageHeader } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
+import { ShopComparison } from './CustomExport';
 
 /** Barre horizontale simple (proportion du maximum). */
 function Bar({ value, max, tone = 'var(--green)' }: { value: number; max: number; tone?: string }) {
@@ -49,6 +50,7 @@ export function Stats() {
     <>
       <PageHeader title="Statistiques" sub="Ce qui se vend, quand, et ce qui coince" backTo="" />
       <PeriodPicker p={p} />
+      <ShopComparison range={p.range} today={p.today} />
 
       {st.salesCount === 0 && st.cancelledCount === 0 ? (
         <div style={{ marginTop: 12 }}><Empty title="Pas de vente sur cette période" text="Choisis une période plus longue pour voir tes statistiques." /></div>

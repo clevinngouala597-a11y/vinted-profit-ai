@@ -24,6 +24,8 @@ import { useData } from '../lib/useData';
 import { IDownload } from '../ui/icons';
 import { ErrorBox, PageHeader, useAction, useUI } from '../ui/kit';
 import { PeriodPicker, usePeriod } from './PeriodPicker';
+import { CustomExportSheet } from './CustomExport';
+import { ACCOUNTING_PRESET, type ExportTableId } from '../lib/customExports';
 
 export function Exports() {
   const ds = useData();
@@ -33,6 +35,7 @@ export function Exports() {
   const [photos, setPhotos] = useState(true);
   const [pdfMonth, setPdfMonth] = useState(todayISO().slice(0, 7));
   const { error, run, busy } = useAction();
+  const [custom, setCustom] = useState<ExportTableId[] | null>(null);
   const stamp = `${p.range.from}_${p.range.to}`;
 
   const dl = (name: string, content: string) => {
@@ -49,9 +52,15 @@ export function Exports() {
     <>
       <PageHeader title="Exports et sauvegarde" backTo="" />
       <ErrorBox error={error} />
-      <PeriodPicker p={p} />
+      <h2 style={{ marginTop: 4 }}>Sur mesure</h2>
+      <div className="list">
+        <ExportRow title="Préparation comptable" sub="Livre des recettes, registre des achats, écritures, dépenses, trésorerie, invendus" onClick={() => setCustom(ACCOUNTING_PRESET)} />
+        <ExportRow title="Export personnalisé" sub="Choisis les tableaux, la période, le dressing et le format" onClick={() => setCustom(['ventes', 'achats', 'depenses'])} />
+      </div>
+      {custom && <CustomExportSheet preset={custom} onClose={() => setCustom(null)} />}
 
       <h2>Excel et PDF</h2>
+      <PeriodPicker p={p} />
       <div className="list">
         <ExportRow title="Classeur Excel complet" sub="Rapport mensuel, ventes, achats, dépenses, trésorerie, inventaire, définitions" onClick={() => run(async () => {
           const { buildWorkbook } = await import('../lib/office');

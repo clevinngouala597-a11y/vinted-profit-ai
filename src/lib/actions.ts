@@ -8,7 +8,7 @@
 import { getDb, DATA_TABLES } from './db';
 import { BETA } from './beta';
 import { ambientShop, defaultShopFor, MAIN, shopOf } from './shops';
-import { splitPurchase, splitSale, itemCost } from './engine';
+import { splitPurchase, splitSale, itemCost, LOT_SPLIT_LABEL, type LotSplit } from './engine';
 import { allocate, sum, type Cents } from './money';
 import { todayISO } from './period';
 import {
@@ -91,6 +91,7 @@ export function defaultSettings(today = todayISO()): Settings {
     anthropicKey: '',
     messageTemplates: {},
     republishDays: 7,
+    syncLog: [],
   };
 }
 
@@ -182,6 +183,8 @@ export interface PurchaseInput {
   commonFees: Cents;
   /** Prix global d'un lot ; si null, chaque ligne a son propre prix. */
   lotPrice: Cents | null;
+  /** Répartition du prix du lot (par défaut : selon le prix souhaité). En « manuel », `price` de chaque ligne est sa part. */
+  lotSplit?: LotSplit;
   notes?: string;
   /** dressing (par défaut : celui affiché) */
   shop?: string;
@@ -196,14 +199,18 @@ export async function recordPurchase(input: PurchaseInput): Promise<{ purchaseId
   input.lines.forEach((l, k) => {
     if (!l.name.trim()) fail(`Article ${k + 1} : indique un nom.`);
     if (!l.category.trim()) fail(`Article ${k + 1} : choisis une catégorie.`);
-    if (input.lotPrice === null) {
-      if (l.price === null) fail(`Article ${k + 1} : indique le prix payé.`);
+    if (input.lotPrice === null || input.lotSplit === 'manuel') {
+      if (l.price === null) fail(`Article ${k + 1} : indique ${input.lotPrice === null ? 'le prix payé' : 'sa part du lot'}.`);
       nonNeg(l.price!, `Article ${k + 1} : le prix`);
     }
     if (l.targetPrice !== null) nonNeg(l.targetPrice, `Article ${k + 1} : le prix souhaité`);
   });
 
-  const split = splitPurchase(input.lines, input.commonFees, input.lotPrice);
+  if (input.lotPrice !== null && input.lotSplit === 'manuel') {
+    const total = sum(input.lines.map((l) => l.price ?? 0));
+    if (total !== input.lotPrice) fail(`La somme des parts (${total / 100} €) doit être égale au prix du lot (${input.lotPrice / 100} €).`);
+  }
+  const split = splitPurchase(input.lines, input.commonFees, input.lotPrice, input.lotSplit);
   const db = getDb();
   const shop = input.shop ?? ambientShop() ?? defaultShopFor((await db.settings.get('main')) ?? defaultSettings());
   const purchaseId = uid();
@@ -271,7 +278,7 @@ export async function recordPurchase(input: PurchaseInput): Promise<{ purchaseId
           label: `Achat · ${input.source.trim() || `${input.lines.length} article(s)`}`,
         }),
       );
-    await audit('purchase', purchaseId, 'création', `${input.lines.length} article(s), total ${total} c`);
+    await audit('purchase', purchaseId, 'création', `${input.lines.length} article(s), total ${total} c${input.lotPrice !== null ? `, lot réparti : ${LOT_SPLIT_LABEL[input.lotSplit ?? 'souhaite'].toLowerCase()}` : ''}`);
   });
   return { purchaseId, itemIds };
 }
@@ -856,7 +863,7 @@ export async function completeItemCost(id: string, cost: Cents) {
         const itemsTotal = p.itemsTotal - it!.purchasePrice + cost;
         const commonFees = p.commonFees - it!.directFees;
         await db.purchases.update(p.id, { itemsTotal, commonFees });
-        const line = await db.purchaseLines.where('itemId').equals(id).first();
+        const line = await db.purchaseLines.where('itemId').equals(id).filter((l) => l.purchaseId === p.id).first();
         if (line) await db.purchaseLines.update(line.id, { price: cost, allocatedFees: 0 });
         const total = itemsTotal + commonFees;
         const ptx = (await db.transactions.where('refId').equals(p.id).toArray()).find((x) => x.refType === 'purchase' && x.kind === 'achat');
@@ -889,12 +896,15 @@ export async function correctItemCost(id: string, purchasePrice: Cents, directFe
     const dPrice = purchasePrice - it!.purchasePrice;
     const dFees = directFees - it!.directFees;
     if (dPrice === 0 && dFees === 0) return;
+    // coûts répartis plus tard sur l'article (autres achats) : ils restent tels quels
+    const spread = sum((await db.purchaseLines.where('itemId').equals(id).toArray()).filter((l) => l.purchaseId !== it!.purchaseId).map((l) => l.allocatedFees));
+    if (directFees < spread) fail(`Les frais ne peuvent pas être inférieurs aux coûts répartis sur cet article (${spread / 100} €).`);
     await db.items.update(id, { purchasePrice, directFees, updatedAt: now() });
     if (it!.purchaseId) {
       const p = await db.purchases.get(it!.purchaseId);
       if (p) await db.purchases.update(p.id, { itemsTotal: p.itemsTotal + dPrice, commonFees: p.commonFees + dFees });
-      const line = await db.purchaseLines.where('itemId').equals(id).first();
-      if (line) await db.purchaseLines.update(line.id, { price: purchasePrice, allocatedFees: directFees });
+      const line = await db.purchaseLines.where('itemId').equals(id).filter((l) => l.purchaseId === it!.purchaseId).first();
+      if (line) await db.purchaseLines.update(line.id, { price: purchasePrice, allocatedFees: directFees - spread });
     }
     await db.transactions.add(
       tx({
@@ -909,6 +919,68 @@ export async function correctItemCost(id: string, purchasePrice: Cents, directFe
     );
     await audit('item', id, 'correction du coût', `${itemCost(it!)} c → ${purchasePrice + directFees} c. Raison : ${reason.trim()}`);
   });
+}
+
+export type SpreadMethod = 'egal' | 'cout' | 'prix';
+export const SPREAD_LABEL: Record<SpreadMethod, string> = {
+  egal: 'À parts égales',
+  cout: "Au prorata du coût d'achat",
+  prix: 'Au prorata du prix souhaité',
+};
+
+export interface SpreadInput {
+  itemIds: string[];
+  amount: Cents;
+  label: string;
+  date: ISODate;
+  method: SpreadMethod;
+}
+
+/** Parts d'un coût réparti (même calcul que l'enregistrement, pour l'aperçu). */
+export function spreadShares(items: Pick<Item, 'purchasePrice' | 'directFees' | 'targetPrice'>[], amount: Cents, method: SpreadMethod): Cents[] {
+  const w = method === 'cout' ? items.map(itemCost) : method === 'prix' ? items.map((i) => i.targetPrice ?? 0) : items.map(() => 1);
+  return allocate(amount, w);
+}
+
+/**
+ * Répartit un coût payé après coup (nettoyage, réparation, livraison d'un lot…) sur plusieurs articles
+ * encore en stock. Il est enregistré comme un achat à part (« Coût réparti »), payé à sa date, dont
+ * chaque article reçoit une part : son coût de revient augmente d'autant, et tout reste traçable.
+ */
+export async function spreadCost(input: SpreadInput): Promise<string> {
+  if (!isDate(input.date)) fail('La date est invalide.');
+  if (input.amount <= 0) fail('Indique le montant à répartir.');
+  if (!input.label.trim()) fail('Indique ce que représente ce coût.');
+  const ids = [...new Set(input.itemIds)];
+  if (ids.length === 0) fail('Choisis au moins un article.');
+  const db = getDb();
+  const purchaseId = uid();
+  const t = now();
+  await db.transaction('rw', [db.items, db.purchases, db.purchaseLines, db.transactions, db.auditLogs], async () => {
+    const its = (await db.items.bulkGet(ids)) as (Item | undefined)[];
+    its.forEach((it, k) => {
+      if (!it) fail(`Article introuvable (${ids[k]}).`);
+      if (!SELLABLE.includes(it!.status)) fail(`« ${it!.name} » n'est plus en stock : son coût ne peut plus changer.`);
+      if (it!.costPending) fail(`Indique d'abord le prix d'achat de « ${it!.name} ».`);
+    });
+    const items = its as Item[];
+    const shops = new Set(items.map((i) => shopOf(i)));
+    if (shops.size > 1) fail('Choisis des articles d’un même dressing.');
+    const shares = spreadShares(items, input.amount, input.method);
+    const label = input.label.trim();
+    await db.purchases.add({
+      id: purchaseId, date: input.date, source: `Coût réparti · ${label}`, paymentMethod: '', itemsTotal: 0, commonFees: input.amount,
+      notes: `${SPREAD_LABEL[input.method]} sur ${items.length} article(s)`, ...(shopOf(items[0]) !== MAIN ? { shop: shopOf(items[0]) } : {}), createdAt: t,
+    });
+    for (let k = 0; k < items.length; k++) {
+      await db.purchaseLines.add({ id: uid(), purchaseId, itemId: items[k].id, price: 0, allocatedFees: shares[k] });
+      await db.items.update(items[k].id, { directFees: items[k].directFees + shares[k], updatedAt: t });
+      await audit('item', items[k].id, 'coût réparti', `+${shares[k]} c (${label})`);
+    }
+    await db.transactions.add(tx({ date: input.date, amount: -input.amount, kind: 'achat', status: 'confirme', refType: 'purchase', refId: purchaseId, label: `Coût réparti · ${label}` }));
+    await audit('purchase', purchaseId, 'coût réparti', `${input.amount} c sur ${items.length} article(s), ${SPREAD_LABEL[input.method].toLowerCase()}`);
+  });
+  return purchaseId;
 }
 
 export async function changeItemStatus(id: string, to: ItemStatus, date: ISODate = todayISO()) {

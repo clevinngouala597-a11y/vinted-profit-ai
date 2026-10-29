@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BETA, isLocked } from '../lib/beta';
 import { useData } from '../lib/useData';
-import { IBell, IBox, ICalc, IChart, IDownload, IGear, IHome, IMail, IPlus, IReceipt, IScale, ITag, ITarget, ITrend, IWallet } from './icons';
+import { IBell, IBox, ICheck, ISearch, ICalc, IChart, IDownload, IGear, IHome, IMail, IPlus, IReceipt, IScale, ITag, ITarget, ITrend, IWallet } from './icons';
 
 /** Écran large (ordinateur, tablette en paysage) : menu latéral et mises en page en colonnes. */
 export const WIDE = '(min-width: 1024px)';
@@ -32,6 +32,8 @@ export function Sidebar({ route, onAdd }: { route: string | undefined; onAdd: ()
     { to: 'notifications', label: 'Alertes', icon: <IBell /> },
   ];
   const tools: Link[] = [
+    { to: 'assistant', label: 'Assistant', icon: <ISearch /> },
+    { to: 'invendus', label: 'Invendus', icon: <IBox /> },
     { to: 'synchro', label: 'Synchro Vinted', icon: <IMail /> },
     { to: 'bordereaux', label: 'Bordereaux', icon: <IReceipt /> },
     { to: 'messages', label: 'Messages prêts', icon: <IMail /> },
@@ -44,6 +46,7 @@ export function Sidebar({ route, onAdd }: { route: string | undefined; onAdd: ()
     { to: 'previsions', label: 'Prévisions', icon: <ITrend /> },
     { to: 'tresorerie', label: 'Trésorerie', icon: <IWallet /> },
     { to: 'fiscal', label: 'Fiscalité', icon: <IScale /> },
+    { to: 'verification', label: 'Vérification', icon: <ICheck /> },
     { to: 'calculateur', label: 'Calculateur', icon: <ICalc /> },
     { to: 'exports', label: 'Exports', icon: <IDownload /> },
     ...(BETA ? [{ to: 'avis', label: 'Donner mon avis', icon: <IMail /> }] : []),
