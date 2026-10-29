@@ -207,6 +207,12 @@ function useAutoSync() {
   const ui = useUI();
   const toast = useRef(ui.toast);
   toast.current = ui.toast;
+  // arrivée depuis l'ancienne adresse
+  useEffect(() => {
+    const t = (window as unknown as { __transfer?: import('./lib/transfer').TransferResult | null }).__transfer;
+    (window as unknown as { __transfer?: unknown }).__transfer = null;
+    if (t?.status === 'imported') toast.current(`Bienvenue sur la nouvelle adresse : tes données ont suivi (${t.sales} ventes)${t.photosMissing ? `, sauf ${t.photosMissing} photo${t.photosMissing > 1 ? 's' : ''}` : ''}.`);
+  }, []);
   // retour de la connexion Google
   useEffect(() => {
     const r = (window as unknown as { __googleRedirect?: import('./lib/google/auth').RedirectResult }).__googleRedirect;

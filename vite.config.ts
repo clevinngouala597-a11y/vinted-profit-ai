@@ -62,9 +62,9 @@ function csp(): Plugin {
   };
 }
 
-// GitHub Pages sert le site sous /vinted-profit-ai/ (et la bêta sous /vinted-profit-ai/beta/)
+// GitHub Pages sert le site à la racine de https://cngapp.github.io/ (et la bêta sous /beta/)
 export default defineConfig({
-  base: process.env.VITE_BASE ?? '/vinted-profit-ai/',
+  base: process.env.VITE_BASE ?? '/',
   plugins: [react(), csp(), ...(BETA ? [beta()] : [])],
   test: { environment: 'node', include: ['tests/**/*.test.ts'] },
 } as any);

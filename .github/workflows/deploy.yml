@@ -1,8 +1,13 @@
 name: Tests et déploiement
 
+# Deux dépôts, un seul fichier :
+#  - cngapp/cngapp.github.io (branche « source ») : l'appli, publiée sur https://cngapp.github.io
+#    (GitHub Pages sert la branche « main » de ce dépôt, remplie ici avec le site construit) ;
+#  - clevinngouala597-a11y/vinted-profit-ai (branche « main ») : l'ancienne adresse, qui ne garde
+#    qu'une page de déménagement (transfert des données de l'appareil puis redirection).
 on:
   push:
-    branches: [main]
+    branches: [main, source]
   pull_request:
   workflow_dispatch:
 
@@ -23,25 +28,45 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # ---- ancienne adresse : page de déménagement seulement ----
+      - name: Page de déménagement (ancienne adresse)
+        if: github.repository != 'cngapp/cngapp.github.io'
+        run: npm run build:old
+      - name: Publier l'ancienne adresse
+        if: github.repository != 'cngapp/cngapp.github.io' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist-old
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Page de déménagement vers cngapp.github.io"
+      # ---- nouvelle adresse : l'appli complète ----
       - name: Failles connues dans les librairies
+        if: github.repository == 'cngapp/cngapp.github.io'
         run: npm audit --omit=dev --audit-level=high
       - name: Tests (moteur financier, exports, import, fiscalité, OCR)
+        if: github.repository == 'cngapp/cngapp.github.io'
         run: npm test
       - name: Build
+        if: github.repository == 'cngapp/cngapp.github.io'
         run: npm run build
-      - name: Build de la version bêta (…/beta/)
+        env:
+          VITE_BUILD: ${{ github.sha }}
+      - name: Build de la version bêta (/beta/)
+        if: github.repository == 'cngapp/cngapp.github.io'
         run: npm run build:beta
         env:
           VITE_BUILD: ${{ github.sha }}
       - name: Désactiver Jekyll
+        if: github.repository == 'cngapp/cngapp.github.io'
         run: touch dist/.nojekyll
-      # Publication sur la branche gh-pages, servie par GitHub Pages
-      - name: Publier
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      - name: Publier sur https://cngapp.github.io
+        if: github.repository == 'cngapp/cngapp.github.io' && github.ref == 'refs/heads/source' && github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          publish_branch: gh-pages
+          publish_branch: main
           force_orphan: true
           commit_message: "Publication de l'application"

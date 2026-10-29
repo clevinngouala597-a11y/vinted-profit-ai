@@ -1,5 +1,5 @@
 /**
- * Version bêta : publiée à part (…/vinted-profit-ai/beta/), avec sa propre base de données sur
+ * Version bêta : publiée à part (https://cngapp.github.io/beta/), avec sa propre base de données sur
  * l'appareil, des données d'exemple pour essayer tout de suite, et un formulaire d'avis.
  *
  * Les avis sont envoyés en notification via ntfy.sh sur un sujet dédié : le créateur de l'appli

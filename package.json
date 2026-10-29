@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "build:beta": "VITE_BETA=1 VITE_BASE=/vinted-profit-ai/beta/ vite build --outDir dist/beta"
+    "build:beta": "VITE_BETA=1 VITE_BASE=/beta/ vite build --outDir dist/beta",
+    "build:old": "node scripts/build-old.mjs"
   },
   "dependencies": {
     "dexie": "^4.4.7",
