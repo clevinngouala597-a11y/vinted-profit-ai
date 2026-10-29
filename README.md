@@ -149,7 +149,7 @@ L'application est ensuite servie à l'adresse `https://<compte>.github.io/vinted
 
 ## Version bêta (testeurs)
 
-Une version bêta est publiée à part, à l'adresse `…/vinted-profit-ai/beta/` (`npm run build:beta`, faite automatiquement par le déploiement).
+Une version bêta est publiée à part, à l'adresse `…/beta/` (`npm run build:beta`, faite automatiquement par le déploiement).
 
 - **Données séparées** : sa propre base sur l'appareil (`cng-vinted-beta`) et son propre cache hors ligne ; installer la bêta à côté de la version principale ne mélange rien.
 - **Essayer avec un exemple** : à l'ouverture, un toucher remplit l'appli avec deux mois de ventes inventées (dates calculées à partir d'aujourd'hui). « Commencer avec mes données » efface l'exemple.
