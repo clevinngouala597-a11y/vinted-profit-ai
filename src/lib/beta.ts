@@ -17,13 +17,11 @@ export const FEEDBACK_TOPIC = 'cng-vinted-avis-d64bxo3kxbfgy7e9uplx';
  */
 export const FEEDBACK_MAIL_URL = 'https://script.google.com/macros/s/AKfycbz2JmFDNjtH7n6UOcC4YDqBmG19Dq4ZJfHOY-5g4zMzBXVCUxW-13HQgca06Q1ckJ0U/exec';
 
-/** Fonctions réservées à la version complète pendant la bêta (écran → nom affiché). */
-export const LOCKED: Record<string, string> = {
-  previsions: 'Prévisions', fiscal: 'Fiscalité', tresorerie: 'Trésorerie et réinvestissement', exports: 'Exports et sauvegarde', import: 'Import',
-  annonce: 'Annonce IA', photos: 'Photos IA',
-  messages: 'Messages prêts', republier: 'À republier', calculateur: 'Calculateur de prix', resume: 'Résumé du mois',
-  bordereaux: 'Bordereaux',
-};
+/**
+ * Fonctions réservées à la version complète pendant la bêta (écran → nom affiché).
+ * Vide : les testeurs ont accès à toutes les fonctionnalités.
+ */
+export const LOCKED: Record<string, string> = {};
 export const isLocked = (route: string | undefined) => BETA && !!route && route.split('?')[0] in LOCKED && (!isAdmin() || viewAsTester());
 
 export const FEEDBACK_KINDS = [

@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Appearance, LockSettings, ShopSettings } from './SettingsExtra';
-import { BETA, BUILD } from '../lib/beta';
+import { BETA, BUILD, LOCKED } from '../lib/beta';
 import { isAdmin, setViewAsTester, viewAsTester } from '../lib/betaAccess';
 import { useState } from 'react';
 import { saveSettings, wipeAllData } from '../lib/actions';
@@ -169,7 +169,7 @@ export function SettingsScreen() {
       <p className="tiny faint" style={{ marginTop: 14 }}>
         Les données sont stockées uniquement sur cet appareil, dans le navigateur. Aucune connexion à Vinted n'est utilisée et ton mot de passe Vinted n'est jamais demandé.
       </p>
-      {BETA && isAdmin() && (
+      {BETA && isAdmin() && Object.keys(LOCKED).length > 0 && (
         <label className="check" style={{ marginTop: 14 }}>
           <input type="checkbox" checked={viewAsTester()} onChange={(e) => { setViewAsTester(e.target.checked); location.reload(); }} />
           <span><b>Admin : voir comme un testeur</b><br /><span className="small muted">Affiche les cadenas des fonctions réservées, comme pour tes testeurs. Décoche pour tout rouvrir.</span></span>
