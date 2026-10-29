@@ -11,6 +11,11 @@ import { isAdmin, viewAsTester } from './betaAccess';
 export const BETA = import.meta.env.VITE_BETA === '1';
 export const BUILD: string = (import.meta.env.VITE_BUILD || 'dev').slice(0, 7);
 export const FEEDBACK_TOPIC = 'cng-vinted-avis-d64bxo3kxbfgy7e9uplx';
+/**
+ * Script Google du créateur de l'appli : il lui envoie chaque avis par e-mail (son adresse n'est
+ * écrite nulle part, le script écrit à son propriétaire). Vide : avis en notification seulement.
+ */
+export const FEEDBACK_MAIL_URL = 'https://script.google.com/macros/s/AKfycbz2JmFDNjtH7n6UOcC4YDqBmG19Dq4ZJfHOY-5g4zMzBXVCUxW-13HQgca06Q1ckJ0U/exec';
 
 /** Fonctions réservées à la version complète pendant la bêta (écran → nom affiché). */
 export const LOCKED: Record<string, string> = {
@@ -65,15 +70,20 @@ export function feedbackMessage(f: FeedbackInput) {
   };
 }
 
-export async function sendFeedback(f: FeedbackInput, fetcher: typeof fetch = fetch) {
+export async function sendFeedback(f: FeedbackInput, fetcher: typeof fetch = fetch, mailUrl: string = FEEDBACK_MAIL_URL) {
   if (f.message.trim().length < 3) throw new Error('Écris quelques mots pour expliquer.');
-  let res: Response;
-  try {
-    res = await fetcher('https://ntfy.sh/', { method: 'POST', body: JSON.stringify(feedbackMessage(f)) });
-  } catch {
-    throw new Error('Pas de connexion internet : réessaie dans un moment.');
-  }
-  if (!res.ok) throw new Error(res.status === 429 ? 'Trop d’envois d’un coup : réessaie dans une minute.' : 'Envoi impossible pour le moment, réessaie plus tard.');
+  const msg = feedbackMessage(f);
+  // deux envois indépendants : e-mail (script Google) et notification (ntfy). Un seul réussi suffit.
+  const mail = mailUrl
+    ? fetcher(mailUrl, { method: 'POST', headers: { 'content-type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ app: 'cng-vinted', title: msg.title, message: msg.message, contact: f.contact.trim() }), redirect: 'follow' })
+        .then(async (r) => { const b = (await r.json().catch(() => null)) as { ok?: boolean } | null; return r.ok && b?.ok === true; })
+        .catch(() => false)
+    : Promise.resolve(false);
+  const push = fetcher('https://ntfy.sh/', { method: 'POST', body: JSON.stringify(msg) }).then((r) => r, () => null);
+  const [mailed, res] = await Promise.all([mail, push]);
+  if (mailed || res?.ok) return { mailed, pushed: !!res?.ok };
+  if (!res) throw new Error('Pas de connexion internet : réessaie dans un moment.');
+  throw new Error(res.status === 429 ? 'Trop d’envois d’un coup : réessaie dans une minute.' : 'Envoi impossible pour le moment, réessaie plus tard.');
 }
 
 /** Prévient le créateur de l'appli qu'un testeur vient d'ouvrir la bêta. */

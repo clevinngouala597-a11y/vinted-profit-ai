@@ -70,11 +70,27 @@ describe('avis bêta', () => {
     const calls: { url: string; body: string }[] = [];
     const fetcher = (async (url: string, init: RequestInit) => { calls.push({ url, body: String(init.body) }); return new Response('{}', { status: 200 }); }) as unknown as typeof fetch;
     await sendFeedback(base, fetcher);
-    expect(calls[0].url).toBe('https://ntfy.sh/');
-    expect(JSON.parse(calls[0].body).topic).toBe(FEEDBACK_TOPIC);
+    const ntfy = calls.find((c) => c.url === 'https://ntfy.sh/')!;
+    expect(JSON.parse(ntfy.body).topic).toBe(FEEDBACK_TOPIC);
+    expect(calls.some((c) => c.url.startsWith('https://script.google.com/macros/s/'))).toBe(true);
     await expect(sendFeedback({ ...base, message: ' ' }, fetcher)).rejects.toThrow(/quelques mots/);
     const down = (async () => { throw new TypeError('offline'); }) as unknown as typeof fetch;
     await expect(sendFeedback(base, down)).rejects.toThrow(/connexion/);
+  });
+
+  it('envoie aussi l’avis par e-mail (script Google) ; un seul envoi réussi suffit', async () => {
+    const calls: { url: string; body: string }[] = [];
+    const ok = (url: string) => new Response(url.startsWith('https://script') ? '{"ok":true}' : '{}', { status: 200 });
+    const fetcher = (async (url: string, init: RequestInit) => { calls.push({ url, body: String(init.body) }); return ok(url); }) as unknown as typeof fetch;
+    const r = await sendFeedback({ ...base, contact: 'lea@mail.fr' }, fetcher, 'https://script.google.com/macros/s/X/exec');
+    expect(r).toEqual({ mailed: true, pushed: true });
+    const mail = JSON.parse(calls.find((c) => c.url.startsWith('https://script'))!.body);
+    expect(mail).toMatchObject({ app: 'cng-vinted', title: 'Avis bêta · Bug', contact: 'lea@mail.fr' });
+    expect(mail.message).toContain('Le bouton Terminée ne fait rien');
+    const ntfyDown = (async (url: string) => (url.startsWith('https://ntfy') ? new Response('', { status: 500 }) : ok(url))) as unknown as typeof fetch;
+    expect(await sendFeedback(base, ntfyDown, 'https://script.google.com/macros/s/X/exec')).toEqual({ mailed: true, pushed: false });
+    const allDown = (async (url: string) => new Response(url.startsWith('https://script') ? '{"ok":false}' : '', { status: url.startsWith('https://script') ? 200 : 500 })) as unknown as typeof fetch;
+    await expect(sendFeedback(base, allDown, 'https://script.google.com/macros/s/X/exec')).rejects.toThrow(/impossible/);
   });
 
   it('résume l’appareil sans identifiant', () => {
