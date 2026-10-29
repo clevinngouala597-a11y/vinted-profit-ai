@@ -7,7 +7,7 @@
  * (pas un coffre-fort) : elle évite qu'un lien partagé ouvre la bêta à n'importe qui.
  */
 export const ACCESS: Record<string, string> = {
-  'd04f79ad16a3ea90ca066b963e3a997f3e24454ebed5b1026c2a67517479cdf3': 'Admin',
+  'bb15e475c4ef3a6c9c6ab2da7dcae9c2701f744c11da8651d87aa54b9406859d': 'Admin',
   '27fb7aee0c4dac5ee75ae60e0d02117ce4c8e095d419539ad5565db1b969b995': 'Testeur 01',
   'ecc90f6eebe3c1484cb34333d6000fb61988be9fed277a5a1515047c7b793cae': 'Testeur 02',
   'cc92b15e482e3e55a17773861488eba6b0786318fea5cfce31805e80da4d7a4c': 'Testeur 03',
@@ -43,7 +43,8 @@ export async function codeHash(code: string) {
 /** Nom du testeur si le code est valide, sinon null. */
 export async function checkCode(code: string, list: Record<string, string> = ACCESS): Promise<{ hash: string; tester: string } | null> {
   const n = normalizeCode(code);
-  if (n.length !== 13) return null; // CNG + 10 caractères
+  // codes testeurs : CNG + 10 caractères ; code admin : personnel (au moins 6 caractères)
+  if (n.length < 6 || n.length > 20) return null;
   const hash = await codeHash(n);
   return list[hash] ? { hash, tester: list[hash] } : null;
 }

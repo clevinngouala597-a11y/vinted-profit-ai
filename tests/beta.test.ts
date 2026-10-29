@@ -118,3 +118,12 @@ describe('accès à la bêta', () => {
     expect(storedAccess(ACCESS)).toBeNull(); // pas de localStorage ici : accès fermé
   });
 });
+
+describe('code admin personnel', () => {
+  it('« clevinng » ouvre l’accès admin, en majuscules ou minuscules', async () => {
+    const { checkCode } = await import('../src/lib/betaAccess');
+    expect((await checkCode('clevinng'))?.tester).toBe('Admin');
+    expect((await checkCode(' CleVinng '))?.tester).toBe('Admin');
+    expect(await checkCode('clevin')).toBeNull();
+  });
+});
