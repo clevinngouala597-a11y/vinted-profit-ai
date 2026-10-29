@@ -99,7 +99,14 @@ export function VintedSyncScreen() {
               </div>
             )}
           </div>
-          {!google && (s.scriptVersion ?? 1) < SCRIPT_VERSION && <ScriptUpdate copy={copyScript} showScript={showScript} />}
+          {!google && (
+            <div className="card" style={{ marginTop: 10 }}>
+              <b>Passe à la connexion Google</b>
+              <p className="small muted" style={{ margin: '4px 0 10px' }}>Plus simple que le script : plus rien à installer ni à mettre à jour, et les bordereaux se téléchargent directement. Tes ventes déjà enregistrées sont gardées.</p>
+              <GoogleButton label="Se connecter avec Google" onClick={() => run(async () => { await saveSettings({ syncSince: since }); startGoogleLogin(); })} />
+            </div>
+          )}
+          {!google && location.hash.includes('avance') && (s.scriptVersion ?? 1) < SCRIPT_VERSION && <ScriptUpdate copy={copyScript} showScript={showScript} />}
           <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
             <button className="btn btn-primary" disabled={busy} onClick={() => run(async () => { const r = await syncNow(); setResult(syncSummary(r)); })}>
               {busy ? 'Synchronisation…' : 'Synchroniser maintenant'}

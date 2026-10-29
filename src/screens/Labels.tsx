@@ -92,10 +92,11 @@ export function Labels() {
     <>
       <PageHeader title="Bordereaux" sub="Tes bordereaux d'envoi Vinted reçus par e-mail, imprimés d'un coup" backTo="" />
       <ErrorBox error={error} />
-      {(s.scriptVersion ?? 1) < SCRIPT_VERSION && (
-        <div className="alert warn" style={{ display: 'block', marginBottom: 12 }}>
-          Ton script Google doit être mis à jour (version {SCRIPT_VERSION}) pour télécharger les bordereaux : Menu → Synchro Vinted.
-        </div>
+      {/* la connexion Google lit les bordereaux directement : le script n'est concerné qu'en option avancée */}
+      {s.syncMode !== 'google' && (s.scriptVersion ?? 1) < SCRIPT_VERSION && (
+        <button className="alert warn" style={{ display: 'block', width: '100%', border: 0, textAlign: 'left', cursor: 'pointer', marginBottom: 12 }} onClick={() => go('synchro')}>
+          Pour télécharger les bordereaux, connecte-toi avec Google dans Synchro Vinted (plus besoin de script). <b>Ouvrir</b>
+        </button>
       )}
 
       <div className="seg" role="group" aria-label="Format d'impression" style={{ marginBottom: 6 }}>
