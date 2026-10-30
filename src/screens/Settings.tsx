@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Appearance, LockSettings, ShopSettings } from './SettingsExtra';
+import { StatsSettings } from './AdminUsers';
 import { BETA, BUILD, LOCKED } from '../lib/beta';
 import { isAdmin, setViewAsTester, viewAsTester } from '../lib/betaAccess';
 import { useState } from 'react';
@@ -166,6 +167,7 @@ export function SettingsScreen() {
           go('');
         }}>Effacer toutes les données</button>
       </div>
+      <StatsSettings />
       <p className="tiny faint" style={{ marginTop: 14 }}>
         Les données sont stockées uniquement sur cet appareil, dans le navigateur. Aucune connexion à Vinted n'est utilisée et ton mot de passe Vinted n'est jamais demandé.
       </p>

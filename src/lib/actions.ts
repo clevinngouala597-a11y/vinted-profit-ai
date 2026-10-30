@@ -92,6 +92,7 @@ export function defaultSettings(today = todayISO()): Settings {
     messageTemplates: {},
     republishDays: 7,
     syncLog: [],
+    shareStats: true,
   };
 }
 

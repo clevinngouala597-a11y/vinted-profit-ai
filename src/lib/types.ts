@@ -89,6 +89,8 @@ export interface Settings {
   messageTemplates: Record<string, string>;
   /** Un article en vente sans bouger depuis ce nombre de jours est proposé à la republication. */
   republishDays: number;
+  /** Envoyer un signal anonyme d'utilisation (compte des utilisateurs, pour le créateur de l'appli). */
+  shareStats: boolean;
   /** Historique des dernières synchros (la plus récente d'abord). */
   syncLog: { at: ISOTime; ok: boolean; partial?: boolean; read: number; added: number; applied: number; error?: string; ms: number }[];
 }

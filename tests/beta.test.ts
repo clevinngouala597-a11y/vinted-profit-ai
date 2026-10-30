@@ -120,10 +120,11 @@ describe('accès à la bêta', () => {
 });
 
 describe('code admin personnel', () => {
-  it('« clevinng » ouvre l’accès admin, en majuscules ou minuscules', async () => {
-    const { checkCode } = await import('../src/lib/betaAccess');
-    expect((await checkCode('clevinng'))?.tester).toBe('Admin');
-    expect((await checkCode(' CleVinng '))?.tester).toBe('Admin');
-    expect(await checkCode('clevin')).toBeNull();
+  it('un code personnel (pas seulement CNG + 10 caractères) ouvre l’accès admin, sans tenir compte des majuscules', async () => {
+    const { checkCode, codeHash } = await import('../src/lib/betaAccess');
+    const list = { [await codeHash('MonCode99')]: 'Admin' };
+    expect((await checkCode('moncode99', list))?.tester).toBe('Admin');
+    expect((await checkCode(' MONCODE99 ', list))?.tester).toBe('Admin');
+    expect(await checkCode('moncode', list)).toBeNull();
   });
 });

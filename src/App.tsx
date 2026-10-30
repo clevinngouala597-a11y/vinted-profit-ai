@@ -20,6 +20,7 @@ import { SettingsScreen } from './screens/Settings';
 import { Controle, JournalScreen } from './screens/Controle';
 import { Unsold } from './screens/Unsold';
 import { Assistant } from './screens/Assistant';
+import { AdminUsers } from './screens/AdminUsers';
 import { Onboarding } from './screens/Onboarding';
 import { Goals } from './screens/Goals';
 import { Import } from './screens/Import';
@@ -106,6 +107,7 @@ function Shell() {
     case 'verification': screen = <Controle />; break;
     case 'invendus': screen = <Unsold />; break;
     case 'assistant': screen = <Assistant />; break;
+    case 'admin': screen = <AdminUsers />; break;
     case 'objectifs': screen = <Goals />; break;
     case 'import': screen = <Import />; break;
     case 'notifications': screen = <NotificationsScreen />; break;
@@ -207,6 +209,20 @@ function useAutoSync() {
   const ui = useUI();
   const toast = useRef(ui.toast);
   toast.current = ui.toast;
+  // signal anonyme d'utilisation (liste des utilisateurs de l'admin), toutes les 5 minutes appli affichée
+  useEffect(() => {
+    const ping = async () => {
+      if (document.visibilityState === 'hidden') return;
+      const { loadDataset } = await import('./lib/actions');
+      const s = (await loadDataset()).settings;
+      const { sendPresence } = await import('./lib/presence');
+      await sendPresence({ google: s.syncMode === 'google', enabled: s.shareStats !== false });
+    };
+    ping();
+    const t = window.setInterval(ping, 60_000);
+    document.addEventListener('visibilitychange', ping);
+    return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', ping); };
+  }, []);
   // arrivée depuis l'ancienne adresse
   useEffect(() => {
     const t = (window as unknown as { __transfer?: import('./lib/transfer').TransferResult | null }).__transfer;
