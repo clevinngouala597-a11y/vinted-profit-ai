@@ -65,10 +65,15 @@ export function extractPseudo(text: string): string | null {
   return m ? m[1] : null;
 }
 
-export function shopForPseudo(s: Pick<Settings, 'shops'>, pseudo: string | null): string {
-  if (!pseudo) return MAIN;
+/** Dressing dont le pseudo Vinted est indiqué (null : pseudo inconnu). */
+export function shopIdForPseudo(s: Pick<Settings, 'shops'>, pseudo: string | null): string | null {
+  if (!pseudo) return null;
   const p = pseudo.toLowerCase();
-  return shopsOf(s).find((x) => x.pseudo && x.pseudo.toLowerCase().replace(/^@/, '') === p)?.id ?? MAIN;
+  return shopsOf(s).find((x) => x.pseudo && x.pseudo.toLowerCase().replace(/^@/, '') === p)?.id ?? null;
+}
+
+export function shopForPseudo(s: Pick<Settings, 'shops'>, pseudo: string | null): string {
+  return shopIdForPseudo(s, pseudo) ?? MAIN;
 }
 
 // ---------------------------------------------------------------------------

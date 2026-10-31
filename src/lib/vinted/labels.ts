@@ -179,8 +179,13 @@ export async function buildLabelsPdf(ids: string[], format: 'etiquette' | 'a4', 
   const { loadDataset } = await import('../actions');
   const got: { id: string; pdf?: string; error?: string }[] = [];
   if ((await loadDataset()).settings.syncMode === 'google') {
+    // chaque bordereau est téléchargé avec le compte Gmail qui l'a reçu
     const { fetchGmailLabels } = await import('../google/gmail');
-    got.push(...(await fetchGmailLabels(ids, fetcher)));
+    const { getDb } = await import('../db');
+    const rows = await getDb().syncedEmails.bulkGet(ids);
+    const byAccount = new Map<string, string[]>();
+    ids.forEach((id, k) => { const a = rows[k]?.account ?? ''; byAccount.set(a, [...(byAccount.get(a) ?? []), id]); });
+    for (const [account, list] of byAccount) got.push(...(await fetchGmailLabels(list, fetcher, account || null)));
   } else for (let i = 0; i < ids.length; i += 10) {
     const body = await callScript('bordereaux', { method: 'GET' }, fetcher, `&ids=${ids.slice(i, i + 10).join(',')}`);
     if (!Array.isArray(body.bordereaux)) throw new Error('Ton script Google ne sait pas encore envoyer les bordereaux : mets-le à jour (version 3).');

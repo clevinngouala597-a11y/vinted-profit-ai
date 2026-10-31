@@ -11,7 +11,7 @@
  *       - dépendants d'une vente encore à valider → mis en attente puis réessayés.
  * Rien n'est jamais enregistré deux fois : une vente déjà saisie à la main est reconnue.
  */
-import { extractPseudo, MAIN, scopeDataset, shopForPseudo, shopOf, withShop } from '../shops';
+import { extractPseudo, MAIN, scopeDataset, shopIdForPseudo, shopOf, shopsOf, withShop } from '../shops';
 import {
   AUTO_ITEM_SOURCE,
   MANUAL_STATUS_NOTE,
@@ -210,7 +210,7 @@ const doublonDe = (d: ISODate) => `Doublon d’un e-mail déjà lu (${d.split('-
  *  - un e-mail qui annonce une opération mais dont la lecture échoue (Vinted a changé son format) est
  *    gardé de côté, signalé, et relu automatiquement quand les règles de lecture sont mises à jour.
  */
-export async function ingestEmails(emails: RawEmail[]): Promise<number> {
+export async function ingestEmails(emails: RawEmail[], origin: { account?: string; shop?: string } = {}): Promise<number> {
   const db = getDb();
   const rows = await db.syncedEmails.toArray();
   const known = new Set(rows.map((e) => e.id));
@@ -225,7 +225,8 @@ export async function ingestEmails(emails: RawEmail[]): Promise<number> {
     const ev = twin ? null : parseVintedEmail(e);
     const unknownFormat = !twin && !ev && announcesOperation(e.subject);
     const pseudo = extractPseudo(e.text);
-    const shop = shopForPseudo(settings, pseudo);
+    // dressing : celui du pseudo Vinted s'il est reconnu, sinon celui du compte Gmail, sinon le principal
+    const shop = shopIdForPseudo(settings, pseudo) ?? (origin.shop && shopsOf(settings).some((x) => x.id === origin.shop) ? origin.shop : MAIN);
     const row: SyncedEmail = {
       id: e.id,
       kind: ev?.kind ?? 'autre',
@@ -239,6 +240,7 @@ export async function ingestEmails(emails: RawEmail[]): Promise<number> {
       createdAt: now(),
       resolvedAt: null,
       fp,
+      ...(origin.account ? { account: origin.account } : {}),
       ...(unknownFormat ? { unrecognized: true, raw: e, parser: PARSER_VERSION } : {}),
       // « Bonjour <pseudo> » : range l'e-mail dans le bon dressing
       pseudo,
@@ -541,6 +543,8 @@ export interface SyncResult {
   failed: number;
   /** e-mails au format inconnu (en attente d'une mise à jour) */
   unrecognized: number;
+  /** comptes Gmail en échec (les autres ont été synchronisés) */
+  accountErrors?: { email: string; error: string }[];
 }
 
 /** Au-delà, une vente découverte (import de l'historique) ne déclenche pas d'alerte. */
@@ -549,21 +553,23 @@ const ALERT_DAYS = 3;
 /** Une seule synchronisation à la fois : un second appel pendant qu'une synchro tourne reçoit le même résultat. */
 let inflight: Promise<SyncResult> | null = null;
 
-export function syncNow(fetcher: typeof fetch = fetch, today: ISODate = new Date().toISOString().slice(0, 10)): Promise<SyncResult> {
-  if (!inflight) inflight = loggedSync(fetcher, today).finally(() => { inflight = null; });
+/** `only` : synchroniser un seul compte Gmail (connexion Google). */
+export function syncNow(fetcher: typeof fetch = fetch, today: ISODate = new Date().toISOString().slice(0, 10), only?: string): Promise<SyncResult> {
+  if (!inflight) inflight = loggedSync(fetcher, today, only).finally(() => { inflight = null; });
   return inflight;
 }
 
 /** Chaque synchro (réussie, partielle ou en échec) est inscrite dans l'historique des synchros. */
-async function loggedSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResult> {
+async function loggedSync(fetcher: typeof fetch, today: ISODate, only?: string): Promise<SyncResult> {
   const t0 = Date.now();
   const log = async (run: Omit<SyncRun, 'at' | 'ms'>) => {
     const prev = (await loadDataset()).settings.syncLog ?? [];
     await saveSettings({ syncLog: [{ ...run, at: now(), ms: Date.now() - t0 }, ...prev].slice(0, SYNC_LOG_SIZE) });
   };
   try {
-    const r = await runSync(fetcher, today);
-    await log({ ok: true, ...(r.failed ? { partial: true } : {}), read: r.read, added: r.added, applied: r.applied });
+    const r = await runSync(fetcher, today, only);
+    const errs = r.accountErrors ?? [];
+    await log({ ok: true, ...(r.failed || errs.length ? { partial: true } : {}), read: r.read, added: r.added, applied: r.applied, ...(errs.length ? { error: errs.map((x) => x.error).join(' · ') } : {}) });
     return r;
   } catch (e) {
     await log({ ok: false, read: 0, added: 0, applied: 0, error: e instanceof Error ? e.message : 'Erreur inattendue' }).catch(() => {});
@@ -589,7 +595,7 @@ export async function repairTitles() {
   }
 }
 
-async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResult> {
+async function runSync(fetcher: typeof fetch, today: ISODate, only?: string): Promise<SyncResult> {
   await repairTitles();
   const ds = await loadDataset();
   const { syncUrl, syncToken } = ds.settings;
@@ -598,30 +604,59 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
   const since = ds.settings.syncSince ?? ds.settings.trackingStart;
   // Gmail limite le nombre de lectures par jour : après une première lecture complète,
   // seuls les e-mails des derniers jours sont relus (les plus anciens sont déjà enregistrés).
-  const incremental = ds.settings.lastSyncAt && ds.settings.syncedFrom === since;
-  const from = incremental ? maxDate(since, addDays(ds.settings.lastSyncAt!.slice(0, 10), -INCREMENTAL_DAYS)) : since;
+  const startFrom = (last: string | null, from: string | null) => {
+    const incremental = !!last && from === since;
+    return { incremental, from: incremental ? maxDate(since, addDays(last!.slice(0, 10), -INCREMENTAL_DAYS)) : since };
+  };
   const db = getDb();
   const known = new Set((await db.syncedEmails.toArray()).map((e) => e.id));
-  let emails: RawEmail[];
+  let emails: RawEmail[] = [];
   let failed = 0;
+  let added = 0;
+  const accountErrors: { email: string; error: string }[] = [];
   if (google) {
-    // connexion Google : lecture directe de Gmail depuis le téléphone (e-mails déjà lus non retéléchargés)
+    // connexion Google : chaque compte Gmail est lu à part, avec son propre point de reprise ;
+    // un compte en panne (connexion expirée…) n'empêche pas les autres d'être synchronisés
     const { fetchGmailVinted } = await import('../google/gmail');
-    const r = await fetchGmailVinted(from, fetcher, 500, known);
-    emails = r.emails;
-    failed = r.failed;
+    const { accountsOf } = await import('../google/accounts');
+    const all = accountsOf(ds.settings);
+    const targets = only ? all.filter((a) => a.email.toLowerCase() === only.toLowerCase()) : all;
+    if (!targets.length) throw new SyncError('Aucun compte Gmail connecté.');
+    const updated = new Map<string, { lastSyncAt: string; syncedFrom: string }>();
+    let firstError: unknown = null;
+    for (const acc of targets) {
+      const { from } = startFrom(acc.lastSyncAt, acc.syncedFrom);
+      try {
+        const r = await fetchGmailVinted(from, fetcher, 500, known, acc.email || null);
+        // chaque e-mail est enregistré dès sa lecture : une coupure ne fait rien perdre
+        added += await ingestEmails(r.emails.filter((e) => e.date.slice(0, 10) >= since), { account: acc.email || undefined, shop: acc.shop });
+        emails = emails.concat(r.emails);
+        failed += r.failed;
+        if (!r.failed) updated.set(acc.email, { lastSyncAt: now(), syncedFrom: since });
+      } catch (e) {
+        firstError ??= e;
+        accountErrors.push({ email: acc.email, error: e instanceof Error ? e.message : 'Erreur inattendue' });
+      }
+    }
+    if (accountErrors.length === targets.length) throw firstError;
+    const fresh = (await loadDataset()).settings;
+    if (fresh.googleAccounts?.length) await saveSettings({ googleAccounts: fresh.googleAccounts.map((a) => (updated.has(a.email) ? { ...a, ...updated.get(a.email)! } : a)) });
+    // ancienne connexion (un seul compte) : son point de reprise reste dans les réglages généraux
+    else if (updated.size) await saveSettings({ syncedFrom: since });
+    // la synchro n'est « réussie » que si tout a été lu, pour tous les comptes
+    if (!failed && !accountErrors.length) await saveSettings({ lastSyncAt: now() });
   } else {
+    const { incremental, from } = startFrom(ds.settings.lastSyncAt, ds.settings.syncedFrom);
     const reply = await withRetry(() => fetchVintedEmails(syncUrl, syncToken, from, fetcher));
     emails = reply.messages;
     if (reply.version !== ds.settings.scriptVersion || reply.notifications !== ds.settings.scriptNotifications || (reply.topic && reply.topic !== ds.settings.ntfyTopic))
       await saveSettings({ scriptVersion: reply.version, scriptNotifications: reply.notifications, ...(reply.topic ? { ntfyTopic: reply.topic } : {}) });
+    added = await ingestEmails(emails.filter((e) => e.date.slice(0, 10) >= since));
+    if (!incremental) await saveSettings({ syncedFrom: since });
+    await saveSettings({ lastSyncAt: now() });
   }
-  // chaque e-mail est enregistré dès sa lecture : une coupure ne fait rien perdre
-  const added = await ingestEmails(emails.filter((e) => e.date.slice(0, 10) >= since));
   await reparseUnrecognized();
   const s = await processPending(today);
-  // la synchro n'est « réussie » que si tout a été lu : sinon, la prochaine reprend au même point
-  if (!failed) await saveSettings({ lastSyncAt: now(), ...(incremental ? {} : { syncedFrom: since }) });
   const inbox = await db.syncedEmails.where('status').equals('inbox').count();
   const fresh = (await db.syncedEmails.where('date').aboveOrEqual(addDays(today, -ALERT_DAYS)).toArray())
     .filter((r) => r.kind === 'sale' && !known.has(r.id) && r.status !== 'ignored')
@@ -631,5 +666,5 @@ async function runSync(fetcher: typeof fetch, today: ISODate): Promise<SyncResul
   }));
   if (ds.settings.saleAlert !== false) announceSales(newSales);
   const unrecognized = await db.syncedEmails.filter((r) => !!r.unrecognized).count();
-  return { read: emails.length, added, applied: s.applied, inbox, waiting: s.waiting, newSales, failed, unrecognized };
+  return { read: emails.length, added, applied: s.applied, inbox, waiting: s.waiting, newSales, failed, unrecognized, ...(accountErrors.length ? { accountErrors } : {}) };
 }

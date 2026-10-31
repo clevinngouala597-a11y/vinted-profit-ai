@@ -69,7 +69,10 @@ export interface Settings {
   backupSalt: string | null;
   /** Source de la synchro : connexion Google directe, ou script Google (option avancée). */
   syncMode: 'google' | 'script' | null;
+  /** Compte Gmail principal (le premier connecté). */
   googleEmail: string | null;
+  /** Comptes Gmail connectés, chacun rattaché à un dressing, avec sa propre synchro. */
+  googleAccounts: { email: string; shop: string; lastSyncAt: ISOTime | null; syncedFrom: ISODate | null }[];
   /** Sujet ntfy secret des notifications « appli fermée ». */
   ntfyTopic: string;
   /** Version du script Google installé (renvoyée par le script) ; null = inconnue. */
@@ -89,6 +92,10 @@ export interface Settings {
   messageTemplates: Record<string, string>;
   /** Un article en vente sans bouger depuis ce nombre de jours est proposé à la republication. */
   republishDays: number;
+  /** Prix d'achat habituel par catégorie (pré-remplissage des saisies uniquement). */
+  categoryPrices: Record<string, Cents>;
+  /** Modèles personnalisés avec leur prix d'achat habituel (pré-remplissage uniquement). */
+  costModels: { id: string; name: string; keywords: string; category: string; price: Cents }[];
   /** Envoyer un signal anonyme d'utilisation (compte des utilisateurs, pour le créateur de l'appli). */
   shareStats: boolean;
   /** Historique des dernières synchros (la plus récente d'abord). */
@@ -377,6 +384,8 @@ export interface SyncedEmail {
   shop?: string;
   /** empreinte du contenu (détection des doublons) */
   fp?: string;
+  /** compte Gmail d'où vient l'e-mail (connexion Google) */
+  account?: string;
   /** l'e-mail annonce une opération mais son format n'a pas été reconnu */
   unrecognized?: boolean;
   /** e-mail gardé pour être relu après une mise à jour des règles de lecture (format inconnu seulement) */

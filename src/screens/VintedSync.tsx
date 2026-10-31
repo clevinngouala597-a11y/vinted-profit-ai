@@ -2,7 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useState } from 'react';
 import { completeItemCost, saveSettings, setCustomSound } from '../lib/actions';
 import { getDb } from '../lib/db';
-import { formatEuros, parseEuros } from '../lib/money';
+import { centsToInput, formatEuros, parseEuros } from '../lib/money';
+import { suggestCost } from '../lib/costTemplates';
 import { formatDate, todayISO } from '../lib/period';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
@@ -11,7 +12,9 @@ import { announceSales, previewSound, SOUNDS, type SoundId } from '../lib/saleAl
 import { appsScriptSource, newSecret, newTopic, SCRIPT_VERSION } from '../lib/vinted/appsScript';
 import { driveBackup, driveRestore, PasswordNeeded, removeBackupPassword, rotateScriptKey, sendTestNotification, setBackupPassword } from '../lib/vinted/drive';
 import { MIN_PASSWORD } from '../lib/backupCrypto';
-import { getSession, googleReady, signOut, startGoogleLogin, tokenValid } from '../lib/google/auth';
+import { getSession, googleReady, startGoogleLogin, tokenValid } from '../lib/google/auth';
+import { accountsOf, removeAccount, updateAccount } from '../lib/google/accounts';
+import { MAIN, shopsOf } from '../lib/shops';
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
 import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales, type SyncResult } from '../lib/vinted/sync';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, useAction, useUI } from '../ui/kit';
@@ -390,7 +393,15 @@ function ScriptPreview({ token, topic, open }: { token: string; topic: string; o
 
 export function MissingCosts() {
   const ds = useData();
+  const ui = useUI();
+  const { error, run, busy } = useAction();
   const items = ds.items.filter((i) => i.costPending).sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+  const proposals = items.map((i) => ({ i, sug: suggestCost(ds.settings, { title: `${i.name} ${i.listingRef}`, category: i.category }) })).filter((x) => x.sug);
+  const applyAll = () => run(async () => {
+    if (!(await ui.confirm({ title: `Appliquer ${proposals.length} prix habituel${proposals.length > 1 ? 's' : ''} ?`, text: 'Chaque article reçoit le prix proposé (modèle reconnu, sinon prix de sa catégorie). Tu pourras corriger un article ensuite depuis sa fiche.', confirmLabel: 'Appliquer' }))) return;
+    for (const x of proposals) await completeItemCost(x.i.id, x.sug!.price);
+    ui.toast(`${proposals.length} prix d'achat enregistré${proposals.length > 1 ? 's' : ''}`);
+  });
   return (
     <>
       <PageHeader title="Prix d'achat à indiquer" sub="Articles créés par la synchro Vinted" backTo="" />
@@ -399,6 +410,9 @@ export function MissingCosts() {
       ) : (
         <>
           <p className="small muted">Tant que le prix d'achat n'est pas indiqué, il compte pour 0 € : le bénéfice affiché est trop haut. Mets 0 si l'article t'appartenait déjà.</p>
+          <ErrorBox error={error} />
+          {proposals.length > 1 && <button className="btn btn-ghost" style={{ marginBottom: 12, width: '100%' }} disabled={busy} onClick={applyAll}>Appliquer les {proposals.length} prix habituels proposés</button>}
+          {proposals.length === 0 && <p className="tiny faint">Astuce : enregistre tes prix habituels (par catégorie ou par modèle) dans Réglages → Prix d'achat habituels, ils seront proposés ici.</p>}
           {items.map((i) => <CostRow key={i.id} itemId={i.id} />)}
         </>
       )}
@@ -412,7 +426,9 @@ function CostRow({ itemId }: { itemId: string }) {
   const item = ds.items.find((i) => i.id === itemId)!;
   const line = ds.saleLines.filter((l) => l.itemId === itemId).at(-1);
   const sale = line ? ds.sales.find((s) => s.id === line.saleId) : undefined;
-  const [cost, setCost] = useState('');
+  // prix habituel proposé (modèle reconnu dans le titre, sinon catégorie) : pré-rempli, à valider
+  const sug = suggestCost(ds.settings, { title: `${item.name} ${item.listingRef}`, category: item.category });
+  const [cost, setCost] = useState(sug ? centsToInput(sug.price) : '');
   const { error, run, busy } = useAction();
   const save = () => run(async () => {
     const c = parseEuros(cost);
@@ -428,7 +444,7 @@ function CostRow({ itemId }: { itemId: string }) {
       </div>
       <ErrorBox error={error} />
       <div className="cols" style={{ alignItems: 'end' }}>
-        <Field label="Prix d'achat"><MoneyInput value={cost} onChange={setCost} /></Field>
+        <Field label="Prix d'achat" hint={sug ? `Prix habituel : ${sug.label}` : undefined}><MoneyInput value={cost} onChange={setCost} /></Field>
         <button className="btn btn-primary" style={{ marginBottom: 12 }} disabled={busy || !cost.trim()} onClick={save}>OK</button>
       </div>
       {sale && cost.trim() && parseEuros(cost) !== null && sale.orderStatus !== 'annulee' && (
@@ -696,33 +712,70 @@ function GoogleConnect({ since, setSince }: { since: string; setSince: (v: strin
 }
 
 /** Compte Google connecté : adresse, état de la connexion, reconnexion, déconnexion. */
+/** Comptes Gmail connectés : un par compte Vinted, chacun rattaché à un dressing et synchronisé à part. */
 function GoogleAccount() {
   const s = useData().settings;
   const ui = useUI();
-  const session = getSession();
-  const live = tokenValid(session);
+  const { error, run, busy } = useAction();
+  const accounts = accountsOf(s);
+  const shops = shopsOf(s);
+  const multiShop = shops.length > 1;
+  const [addShopId, setAddShopId] = useState(() => shops.find((x) => !accounts.some((a) => a.shop === x.id))?.id ?? MAIN);
   return (
-    <div className="card">
-      <div className="row-between" style={{ alignItems: 'center' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span className="google-dot">G</span>
-          <span><b>{s.googleEmail ?? 'Compte Google'}</b><br /><span className="small muted">{live ? 'Connecté' : 'Connexion à renouveler'}</span></span>
-        </span>
-        <span className={`badge ${live ? 'green' : 'warn'}`}>{live ? 'Gmail' : 'Expirée'}</span>
+    <>
+      <ErrorBox error={error} />
+      {accounts.map((acc, k) => {
+        const live = tokenValid(getSession(acc.email || null));
+        return (
+          <div key={acc.email || k} className="card" style={{ marginBottom: 10 }}>
+            <div className="row-between" style={{ alignItems: 'center' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span className="google-dot">G</span>
+                <span style={{ minWidth: 0 }}>
+                  <b style={{ wordBreak: 'break-all' }}>{acc.email || 'Compte Google'}</b><br />
+                  <span className="small muted">{live ? 'Connecté' : 'Connexion à renouveler'}{acc.lastSyncAt ? ` · synchro ${sinceLabel(acc.lastSyncAt)}` : ''}</span>
+                </span>
+              </span>
+              <span className={`badge ${live ? 'green' : 'warn'}`}>{live ? 'Gmail' : 'Expirée'}</span>
+            </div>
+            {multiShop && (
+              <Field label="Dressing de ce compte" hint="Les ventes de ce Gmail y sont rangées (sauf si le pseudo Vinted de l'e-mail correspond à un autre dressing).">
+                <select className="input" value={shops.some((x) => x.id === acc.shop) ? acc.shop : MAIN} disabled={!acc.email}
+                  onChange={(e) => run(async () => { await updateAccount(acc.email, { shop: e.target.value }); ui.toast('Dressing du compte modifié'); })}>
+                  {shops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+              </Field>
+            )}
+            {!live && <div style={{ marginTop: 10 }}><GoogleButton label="Se reconnecter" onClick={() => startGoogleLogin({ hint: acc.email || s.googleEmail })} /></div>}
+            <div className="btn-row" style={{ marginTop: 10 }}>
+              {accounts.length > 1 && live && (
+                <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => run(async () => { const r = await syncNow(undefined, undefined, acc.email); ui.toast(`${acc.email} · ${syncSummary(r)}`); })}>Synchroniser ce compte</button>
+              )}
+              <button className="btn btn-ghost btn-sm" onClick={async () => {
+                const last = accounts.length === 1;
+                if (await ui.confirm({ title: `Déconnecter ${acc.email || 'ce compte'} ?`, text: last ? "L'appli ne lira plus tes e-mails Vinted. Tes ventes déjà enregistrées sont conservées." : 'Seul ce compte est déconnecté : les autres continuent d’être synchronisés. Ses ventes déjà enregistrées sont conservées.', confirmLabel: 'Déconnecter', danger: true })) {
+                  await removeAccount(acc.email);
+                  ui.toast('Compte Gmail déconnecté');
+                }
+              }}>Déconnecter</button>
+            </div>
+          </div>
+        );
+      })}
+      <div className="card" style={{ marginBottom: 10 }}>
+        <b>Un autre compte Vinted ?</b>
+        <p className="small muted" style={{ margin: '4px 0 10px' }}>Connecte l'adresse Gmail de ton autre compte Vinted : ses ventes seront synchronisées à part{multiShop ? ', dans le dressing choisi' : ''}. {multiShop ? '' : 'Crée d’abord un dressing pour lui dans Réglages → Dressings si tu veux séparer ses chiffres.'}</p>
+        {multiShop && (
+          <Field label="Dressing du nouveau compte">
+            <select className="input" value={addShopId} onChange={(e) => setAddShopId(e.target.value)}>
+              {shops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </Field>
+        )}
+        <GoogleButton label="Ajouter un compte Gmail" onClick={() => startGoogleLogin({ add: true, shop: addShopId })} />
+        <p className="tiny faint" style={{ marginBottom: 0 }}>Sur l'écran Google, choisis l'autre adresse (ou « Utiliser un autre compte »).</p>
       </div>
-      {!live && (
-        <div style={{ marginTop: 12 }}>
-          <GoogleButton label="Se reconnecter" onClick={() => startGoogleLogin({ hint: s.googleEmail })} />
-        </div>
-      )}
-      <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={async () => {
-        if (await ui.confirm({ title: 'Déconnecter Google ?', text: "L'appli ne lira plus tes e-mails Vinted. Tes ventes déjà enregistrées sont conservées.", confirmLabel: 'Déconnecter', danger: true })) {
-          await signOut();
-          await saveSettings({ syncMode: null, googleEmail: null });
-          ui.toast('Compte Google déconnecté');
-        }
-      }}>Déconnecter</button>
-    </div>
+    </>
   );
 }
 

@@ -239,13 +239,16 @@ function useAutoSync() {
       return;
     }
     (async () => {
-      const { saveSettings } = await import('./lib/actions');
-      const { loadEmail } = await import('./lib/google/auth');
-      const email = await loadEmail();
-      await saveSettings({ syncMode: 'google', ...(email ? { googleEmail: email } : {}) });
+      const { resolvePendingAccount } = await import('./lib/google/auth');
+      const { registerAccount } = await import('./lib/google/accounts');
+      const email = await resolvePendingAccount();
+      if (!email) { toast.current('Connexion Google reçue, mais l’adresse du compte est illisible : réessaie.'); return; }
+      // nouveau compte : ajouté sans toucher aux autres ; compte déjà connecté : jeton renouvelé
+      await registerAccount(email, r.shop);
+      if (r.silent) return;
       try {
-        const res = await syncNow();
-        if (!res.newSales.length) toast.current(`Gmail connecté · ${syncSummary(res)}`);
+        const res = await syncNow(undefined, undefined, r.add ? email : undefined);
+        if (!res.newSales.length) toast.current(`${email} connecté · ${syncSummary(res)}`);
       } catch (e) {
         toast.current(e instanceof Error ? e.message : 'Synchro impossible pour le moment');
       }
@@ -263,13 +266,16 @@ function useAutoSync() {
       const last = s.syncLog?.[0];
       if (last && !last.ok && Date.now() - Date.parse(last.at) < 120_000) return;
       if (google) {
+        // jeton expiré : reconnexion silencieuse chez Google, compte par compte (au plus une fois toutes les 30 min par compte)
         const { getSession, tokenValid, startGoogleLogin } = await import('./lib/google/auth');
-        if (!tokenValid(getSession())) {
-          // jeton expiré : reconnexion silencieuse chez Google (au plus une fois toutes les 30 min)
-          const last = Number(localStorage.getItem('cng-google-silent-at') ?? 0);
-          if (Date.now() - last < 30 * 60_000 || !navigator.onLine) return;
-          try { localStorage.setItem('cng-google-silent-at', String(Date.now())); } catch { /* */ }
-          startGoogleLogin({ silent: true, hint: s.googleEmail });
+        const { accountsOf } = await import('./lib/google/accounts');
+        for (const acc of accountsOf(s)) {
+          if (tokenValid(getSession(acc.email || null))) continue;
+          const key = `cng-google-silent-at:${acc.email}`;
+          const last = Number(localStorage.getItem(key) ?? 0);
+          if (Date.now() - last < 30 * 60_000) continue;
+          try { localStorage.setItem(key, String(Date.now())); } catch { /* */ }
+          startGoogleLogin({ silent: true, hint: acc.email || s.googleEmail });
           return;
         }
       }

@@ -4,7 +4,8 @@ import { ShopField } from '../ui/ShopPicker';
 import { recordPurchase, savePhoto } from '../lib/actions';
 import { LOT_SPLIT_LABEL, splitPurchase, type LotSplit } from '../lib/engine';
 import { compressImage } from '../lib/images';
-import { formatEuros, parseEuros } from '../lib/money';
+import { centsToInput, formatEuros, parseEuros } from '../lib/money';
+import { categoryPrice } from '../lib/costTemplates';
 import { todayISO } from '../lib/period';
 import { go } from '../lib/router';
 import { useData } from '../lib/useData';
@@ -24,11 +25,15 @@ interface Line {
   target: string;
   status: ItemStatus;
   photos: Blob[];
+  /** modèle enregistré choisi (prix d'achat habituel) */
+  model: string;
+  /** le prix vient d'un prix habituel (catégorie ou modèle) : il suit la catégorie / le modèle tant qu'il n'est pas modifié à la main */
+  priceAuto: boolean;
 }
 
 let k = 0;
 const newLine = (category = DEFAULT_CATEGORIES[1]): Line => ({
-  key: ++k, name: '', category, brand: '', size: '', condition: '', price: '', target: '', status: 'achete', photos: [],
+  key: ++k, name: '', category, brand: '', size: '', condition: '', price: '', target: '', status: 'achete', photos: [], model: '', priceAuto: true,
 });
 
 export function PurchaseForm() {
@@ -43,9 +48,26 @@ export function PurchaseForm() {
   const [lotSplit, setLotSplit] = useState<LotSplit>('souhaite');
   const [fees, setFees] = useState('');
   const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<Line[]>([newLine()]);
+  const models = ds.settings.costModels ?? [];
+  const catPrice = (c: string) => { const v = categoryPrice(ds.settings, c); return v === null ? '' : centsToInput(v); };
+  // nouvelle ligne : prix habituel de sa catégorie déjà rempli
+  const freshLine = (category?: string): Line => { const l = newLine(category); return { ...l, price: catPrice(l.category) }; };
+  const [lines, setLines] = useState<Line[]>(() => [freshLine()]);
   const { error, run, busy } = useAction();
   const cats = [...new Set([...DEFAULT_CATEGORIES, ...ds.settings.customCategories])];
+  /** Catégorie choisie : son prix habituel remplace un prix automatique (jamais un prix tapé à la main). */
+  const pickCategory = (l: Line, category: string): Partial<Line> =>
+    l.priceAuto && !l.model ? { category, price: catPrice(category) } : { category };
+  /** Modèle choisi : son prix (et sa catégorie, et le nom s'il est vide) sont repris. */
+  const pickModel = (l: Line, id: string): Partial<Line> => {
+    const m = models.find((x) => x.id === id);
+    if (!m) return { model: '', ...(l.priceAuto ? { price: catPrice(l.category) } : {}) };
+    return {
+      model: m.id, price: centsToInput(m.price), priceAuto: true,
+      ...(m.category && cats.includes(m.category) ? { category: m.category } : {}),
+      ...(l.name.trim() ? {} : { name: m.name }),
+    };
+  };
   const sources = [...new Set(ds.purchases.map((p) => p.source).filter(Boolean))].slice(0, 8);
 
   const split = splitPurchase(
@@ -144,7 +166,15 @@ export function PurchaseForm() {
           </div>
           <Field label="Nom"><input className="input" value={l.name} onChange={(e) => update(l.key, { name: e.target.value })} placeholder="Sweat Carhartt gris" /></Field>
           <div className="cols">
-            <Field label="Catégorie"><select className="input" value={l.category} onChange={(e) => update(l.key, { category: e.target.value })}>{cats.map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Catégorie"><select className="input" value={l.category} onChange={(e) => update(l.key, pickCategory(l, e.target.value))}>{cats.map((c) => <option key={c}>{c}</option>)}</select></Field>
+            {models.length > 0 && (
+              <Field label="Modèle (facultatif)">
+                <select className="input" value={l.model} onChange={(e) => update(l.key, pickModel(l, e.target.value))}>
+                  <option value="">—</option>
+                  {models.map((m) => <option key={m.id} value={m.id}>{m.name} · {formatEuros(m.price)}</option>)}
+                </select>
+              </Field>
+            )}
             <Field label="Marque"><input className="input" value={l.brand} onChange={(e) => update(l.key, { brand: e.target.value })} /></Field>
             <Field label="Taille"><input className="input" value={l.size} onChange={(e) => update(l.key, { size: e.target.value })} /></Field>
             <Field label="État">
@@ -152,7 +182,11 @@ export function PurchaseForm() {
                 <option value="">—</option>{CONDITIONS.map((c) => <option key={c}>{c}</option>)}
               </select>
             </Field>
-            {(mode === 'unit' || manual) && <Field label={manual ? 'Part du lot' : 'Prix payé'}><MoneyInput value={l.price} onChange={(v) => update(l.key, { price: v })} /></Field>}
+            {(mode === 'unit' || manual) && (
+              <Field label={manual ? 'Part du lot' : 'Prix payé'} hint={l.priceAuto && l.price ? `Prix habituel (${l.model ? models.find((m) => m.id === l.model)?.name ?? 'modèle' : l.category}), modifiable` : undefined}>
+                <MoneyInput value={l.price} onChange={(v) => update(l.key, { price: v, priceAuto: false })} />
+              </Field>
+            )}
             <Field label="Prix souhaité" hint={mode === 'lot' ? 'Sert aussi à répartir le lot' : undefined}><MoneyInput value={l.target} onChange={(v) => update(l.key, { target: v })} /></Field>
           </div>
           <Field label="Statut de départ">
@@ -166,7 +200,7 @@ export function PurchaseForm() {
           <PhotoPicker photos={l.photos} onChange={(photos) => update(l.key, { photos })} />
         </div>
       ))}
-      <button className="btn btn-ghost" onClick={() => setLines([...lines, newLine(lines[lines.length - 1].category)])}>+ Ajouter un article</button>
+      <button className="btn btn-ghost" onClick={() => setLines([...lines, freshLine(lines[lines.length - 1].category)])}>+ Ajouter un article</button>
 
       <Field label="Moyen de paiement (facultatif)"><input className="input" value={payment} onChange={(e) => setPayment(e.target.value)} placeholder="Carte, espèces, porte-monnaie Vinted…" /></Field>
       <Field label="Notes"><textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>

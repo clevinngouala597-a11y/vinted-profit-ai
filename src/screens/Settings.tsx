@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Appearance, LockSettings, ShopSettings } from './SettingsExtra';
+import { Appearance, CostTemplatesSettings, LockSettings, ShopSettings } from './SettingsExtra';
 import { StatsSettings } from './AdminUsers';
 import { BETA, BUILD, LOCKED } from '../lib/beta';
 import { isAdmin, setViewAsTester, viewAsTester } from '../lib/betaAccess';
@@ -155,6 +155,7 @@ export function SettingsScreen() {
         <input className="input" value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="Nouvelle catégorie" onKeyDown={(e) => e.key === 'Enter' && addCat()} />
         <button className="btn btn-ghost btn-sm" onClick={addCat}>Ajouter</button>
       </div>
+      <div style={{ marginTop: 12 }}><CostTemplatesSettings /></div>
 
       <h2>Données</h2>
       <div style={{ display: 'grid', gap: 8 }}>

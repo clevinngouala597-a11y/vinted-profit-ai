@@ -43,7 +43,12 @@ export async function deleteShop(id: string) {
   });
   const s = (await loadDataset()).settings;
   const rest = shopsOf(s).filter((x) => x.id !== id);
-  await saveSettings({ shops: rest.length > 1 ? rest : [], activeShop: s.activeShop === id ? ALL : s.activeShop });
+  await saveSettings({
+    shops: rest.length > 1 ? rest : [],
+    activeShop: s.activeShop === id ? ALL : s.activeShop,
+    // un compte Gmail rattaché à ce dressing passe au dressing principal
+    ...(s.googleAccounts?.some((a) => a.shop === id) ? { googleAccounts: s.googleAccounts.map((a) => (a.shop === id ? { ...a, shop: MAIN } : a)) } : {}),
+  });
 }
 
 export const setActiveShop = (id: string) => saveSettings({ activeShop: id });

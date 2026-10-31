@@ -93,6 +93,9 @@ export function defaultSettings(today = todayISO()): Settings {
     republishDays: 7,
     syncLog: [],
     shareStats: true,
+    categoryPrices: {},
+    googleAccounts: [],
+    costModels: [],
   };
 }
 
@@ -920,6 +923,35 @@ export async function correctItemCost(id: string, purchasePrice: Cents, directFe
     );
     await audit('item', id, 'correction du coût', `${itemCost(it!)} c → ${purchasePrice + directFees} c. Raison : ${reason.trim()}`);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Prix d'achat habituels (pré-remplissage seulement : aucun article existant n'est modifié)
+// ---------------------------------------------------------------------------
+
+export async function setCategoryPrice(category: string, price: Cents | null) {
+  if (!category.trim()) fail('Catégorie invalide.');
+  if (price !== null) nonNeg(price, 'Le prix');
+  const cur = (await loadDataset()).settings.categoryPrices ?? {};
+  const next = { ...cur };
+  if (price === null) delete next[category]; else next[category] = price;
+  await saveSettings({ categoryPrices: next });
+}
+
+export async function saveCostModel(m: { id?: string; name: string; keywords?: string; category?: string; price: Cents }) {
+  const name = m.name.trim();
+  if (!name) fail('Indique le nom du modèle.');
+  nonNeg(m.price, 'Le prix');
+  const list = (await loadDataset()).settings.costModels ?? [];
+  if (list.some((x) => x.id !== m.id && x.name.toLowerCase() === name.toLowerCase())) fail('Ce modèle existe déjà.');
+  const row = { id: m.id ?? uid(), name: name.slice(0, 60), keywords: (m.keywords ?? '').trim().slice(0, 120), category: m.category ?? '', price: m.price };
+  await saveSettings({ costModels: m.id ? list.map((x) => (x.id === m.id ? row : x)) : [...list, row] });
+  return row.id;
+}
+
+export async function deleteCostModel(id: string) {
+  const list = (await loadDataset()).settings.costModels ?? [];
+  await saveSettings({ costModels: list.filter((x) => x.id !== id) });
 }
 
 export type SpreadMethod = 'egal' | 'cout' | 'prix';

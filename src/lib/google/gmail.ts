@@ -11,22 +11,22 @@ import { GMAIL_QUERY } from './config';
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
 export class GoogleAuthNeeded extends SyncError {
-  constructor() { super('Ta connexion Google a expiré : touche « Se reconnecter ».'); }
+  constructor(public email?: string | null) { super(email ? `${email} : connexion Google expirée, touche « Se reconnecter ».` : 'Ta connexion Google a expiré : touche « Se reconnecter ».'); }
 }
 
 /** Appel à l'API Gmail, retenté automatiquement en cas de coupure ou de surcharge passagère. */
-const call = <T,>(path: string, fetcher: typeof fetch): Promise<T> => withRetry(() => callOnce<T>(path, fetcher));
+const call = <T,>(path: string, fetcher: typeof fetch, email?: string | null): Promise<T> => withRetry(() => callOnce<T>(path, fetcher, email));
 
-async function callOnce<T>(path: string, fetcher: typeof fetch): Promise<T> {
-  const s = getSession();
-  if (!tokenValid(s)) throw new GoogleAuthNeeded();
+async function callOnce<T>(path: string, fetcher: typeof fetch, email?: string | null): Promise<T> {
+  const s = getSession(email);
+  if (!tokenValid(s)) throw new GoogleAuthNeeded(email);
   let res: Response;
   try {
     res = await fetcher(`${API}${path}`, { headers: { Authorization: `Bearer ${s!.token}` } });
   } catch {
     throw new TransientSyncError('Impossible de joindre Gmail : vérifie ta connexion internet.');
   }
-  if (res.status === 401) throw new GoogleAuthNeeded();
+  if (res.status === 401) throw new GoogleAuthNeeded(email);
   if (res.status === 403) throw new SyncError('Gmail refuse l’accès : reconnecte-toi et accepte la lecture de tes e-mails.');
   if (res.status === 429) throw new TransientSyncError('Trop de lectures Gmail d’un coup : réessaie dans quelques minutes.');
   if (res.status >= 500) throw new TransientSyncError(`Gmail est momentanément indisponible (${res.status}) : réessaie dans quelques minutes.`);
@@ -91,12 +91,12 @@ export interface GmailFetch {
  * malgré les nouvelles tentatives, les autres sont quand même rendus : la synchro reprend là où elle
  * s'est arrêtée au lieu de tout perdre.
  */
-export async function fetchGmailVinted(since: string, fetcher: typeof fetch = fetch, max = 500, known: Set<string> = new Set()): Promise<GmailFetch> {
+export async function fetchGmailVinted(since: string, fetcher: typeof fetch = fetch, max = 500, known: Set<string> = new Set(), email?: string | null): Promise<GmailFetch> {
   const ids: string[] = [];
   let page: string | undefined;
   const q = encodeURIComponent(`${GMAIL_QUERY} after:${since.replace(/-/g, '/')}`);
   do {
-    const r = await call<{ messages?: { id: string }[]; nextPageToken?: string }>(`/messages?q=${q}&maxResults=100${page ? `&pageToken=${page}` : ''}`, fetcher);
+    const r = await call<{ messages?: { id: string }[]; nextPageToken?: string }>(`/messages?q=${q}&maxResults=100${page ? `&pageToken=${page}` : ''}`, fetcher, email);
     ids.push(...(r.messages ?? []).map((m) => m.id));
     page = r.nextPageToken;
   } while (page && ids.length < max);
@@ -105,7 +105,7 @@ export async function fetchGmailVinted(since: string, fetcher: typeof fetch = fe
   let failed = 0;
   // 5 lectures à la fois : rapide sans dépasser les limites de Gmail
   for (let i = 0; i < todo.length; i += 5) {
-    const batch = await Promise.allSettled(todo.slice(i, i + 5).map((id) => call<Msg>(`/messages/${id}?format=full`, fetcher)));
+    const batch = await Promise.allSettled(todo.slice(i, i + 5).map((id) => call<Msg>(`/messages/${id}?format=full`, fetcher, email)));
     for (const b of batch) {
       if (b.status === 'fulfilled') out.push(messageToRaw(b.value));
       else if (b.reason instanceof GoogleAuthNeeded) throw b.reason;
@@ -116,11 +116,11 @@ export async function fetchGmailVinted(since: string, fetcher: typeof fetch = fe
 }
 
 /** PDF des bordereaux (même réponse que l'action « bordereaux » du script). */
-export async function fetchGmailLabels(ids: string[], fetcher: typeof fetch = fetch): Promise<{ id: string; pdf?: string; error?: string }[]> {
+export async function fetchGmailLabels(ids: string[], fetcher: typeof fetch = fetch, email?: string | null): Promise<{ id: string; pdf?: string; error?: string }[]> {
   const out: { id: string; pdf?: string; error?: string }[] = [];
   for (const id of ids) {
     try {
-      const m = await call<Msg>(`/messages/${encodeURIComponent(id)}?format=full`, fetcher);
+      const m = await call<Msg>(`/messages/${encodeURIComponent(id)}?format=full`, fetcher, email);
       const subject = (m.payload?.headers ?? []).find((h) => h.name.toLowerCase() === 'subject')?.value ?? '';
       if (!/bordereau/i.test(subject)) { out.push({ id, error: 'pas un bordereau Vinted' }); continue; }
       const pdfPart = (function find(p?: Part): Part | null {
@@ -130,7 +130,7 @@ export async function fetchGmailLabels(ids: string[], fetcher: typeof fetch = fe
         return null;
       })(m.payload);
       if (!pdfPart) { out.push({ id, error: 'pas de PDF (QR code ?)' }); continue; }
-      const att = await call<{ data: string }>(`/messages/${encodeURIComponent(id)}/attachments/${pdfPart.body!.attachmentId}`, fetcher);
+      const att = await call<{ data: string }>(`/messages/${encodeURIComponent(id)}/attachments/${pdfPart.body!.attachmentId}`, fetcher, email);
       // base64 classique, comme le script
       out.push({ id, pdf: att.data.replace(/-/g, '+').replace(/_/g, '/') });
     } catch (e) {
