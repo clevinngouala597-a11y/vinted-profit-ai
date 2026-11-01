@@ -19,6 +19,7 @@ import { TrendChart } from '../ui/TrendChart';
 import { IBox, ICheck, ISearch, IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet, IHeart } from '../ui/icons';
 import { saveSettings } from '../lib/actions';
 import { BETA, isLocked } from '../lib/beta';
+import { isStatsAdmin } from '../lib/presence';
 import { isAdmin, viewAsTester } from '../lib/betaAccess';
 import { leaveDemo } from '../lib/demo';
 import { useUI } from '../ui/kit';
@@ -178,6 +179,7 @@ export function Home() {
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         {BETA && <MenuLink icon={<IMail width={18} height={18} />} title="Donner mon avis" sub="Un bug, une idée ? Ça m'arrive directement" to="avis" close={() => setMenu(false)} />}
         <MenuLink icon={<ISearch width={18} height={18} />} title="Assistant" sub="Pose une question : « mes 5 articles les plus rentables »" to="assistant" close={() => setMenu(false)} />
+        {((BETA && isAdmin() && !viewAsTester()) || isStatsAdmin()) && <MenuLink icon={<ICheck width={18} height={18} />} title="Admin : utilisateurs" sub="Qui utilise l’appli, en ligne, bêta ou officielle" to="admin" close={() => setMenu(false)} />}
         {BETA && <MenuLink icon={<IHeart width={18} height={18} />} title="Tendances" sub="Les articles les plus likés que tu repères" to="tendances" close={() => setMenu(false)} />}
         <MenuLink icon={<IBox width={18} height={18} />} title="Invendus" sub="Argent immobilisé, ancienneté, marge selon le prix" to="invendus" close={() => setMenu(false)} />
         <MenuLink icon={<ICheck width={18} height={18} />} title="Vérification des comptes" sub="Chaque montant relié à son opération, contrôles" to="verification" close={() => setMenu(false)} />
@@ -291,6 +293,13 @@ function BetaCards({ demo }: { demo: boolean }) {
             if (await ui.confirm({ title: 'Commencer avec tes données ?', text: "L'exemple sera effacé et tu pourras configurer ton propre suivi.", confirmLabel: "Effacer l'exemple" })) await leaveDemo();
           }}>Commencer avec mes données</button>
         </div>
+      )}
+      {isAdmin() && !viewAsTester() && (
+        <button className="beta-card" onClick={() => go('admin')}>
+          <span style={{ fontSize: 26 }}>🛡️</span>
+          <span style={{ flex: 1, textAlign: 'left' }}><b>Admin</b><br /><span className="small muted">Qui utilise l’appli, en ligne, bêta ou officielle</span></span>
+          <IChevron />
+        </button>
       )}
       <button className="beta-card" onClick={() => go('tendances')}>
         <span style={{ fontSize: 26 }}>🔥</span>
