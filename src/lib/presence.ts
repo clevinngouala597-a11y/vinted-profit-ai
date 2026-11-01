@@ -115,7 +115,11 @@ export async function fetchUsers(fetcher: typeof fetch = fetch, url = FEEDBACK_M
     throw new Error('Pas de connexion internet.');
   }
   const body = (await res.json().catch(() => null)) as { ok?: boolean; devices?: DeviceRow[]; erreur?: string } | null;
-  if (!body?.ok) throw new Error(body?.erreur === 'cle' ? 'Code admin refusé par le script.' : 'Liste indisponible pour le moment.');
+  if (body?.erreur === 'cle') {
+    lockAdmin();
+    throw new Error('Code admin refusé par le script : entre ton code admin actuel.');
+  }
+  if (!body?.ok) throw new Error('Liste indisponible pour le moment.');
   return body.devices ?? [];
 }
 

@@ -17,7 +17,7 @@ export function Trends() {
   const [sort, setSort] = useState<TrendSort>('likes');
   const [q, setQ] = useState('');
   const [edit, setEdit] = useState<Trend | 'new' | null>(null);
-  const [admin, setAdmin] = useState(() => isStatsAdmin());
+  const [admin, setAdmin] = useState(() => isStatsAdmin() && isAdmin());
   const [loading, setLoading] = useState(true);
   const [netError, setNetError] = useState<string | null>(null);
   const rows = useMemo(() => (list ? sortTrends(filterTrends(list, q), sort) : []), [list, q, sort]);

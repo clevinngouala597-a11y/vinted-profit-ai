@@ -9,7 +9,7 @@
 import { getDb } from './db';
 import { parseEuros } from './money';
 import { FEEDBACK_MAIL_URL } from './beta';
-import { adminKey } from './presence';
+import { adminKey, lockAdmin } from './presence';
 import type { Trend } from './types';
 
 export type TrendFields = Pick<Trend, 'title' | 'brand' | 'size' | 'condition' | 'price' | 'likes' | 'seller' | 'url'>;
@@ -207,7 +207,12 @@ async function adminPost(payload: Record<string, unknown>, fetcher: typeof fetch
     throw new Error('Pas de connexion internet.');
   }
   const body = await readJson(res);
-  if (!body?.ok) throw new Error(body?.erreur === 'cle' ? 'Code admin refusé par le script.' : 'Le script n’a pas pu enregistrer : réessaie.');
+  if (body?.erreur === 'cle') {
+    // ancien code admin : on l'oublie pour que l'appli redemande le bon
+    lockAdmin();
+    throw new Error('Code admin refusé par le script : entre ton code admin actuel.');
+  }
+  if (!body?.ok) throw new Error('Le script n’a pas pu enregistrer : réessaie.');
   return body;
 }
 
