@@ -292,6 +292,11 @@ function BetaCards({ demo }: { demo: boolean }) {
           }}>Commencer avec mes données</button>
         </div>
       )}
+      <button className="beta-card" onClick={() => go('tendances')}>
+        <span style={{ fontSize: 26 }}>🔥</span>
+        <span style={{ flex: 1, textAlign: 'left' }}><b>Tendances</b><br /><span className="small muted">Les articles les plus likés du moment</span></span>
+        <IChevron />
+      </button>
       <button className="beta-card" onClick={() => go('avis')}>
         <span style={{ fontSize: 26 }}>💬</span>
         <span style={{ flex: 1, textAlign: 'left' }}><b>Tu testes la bêta</b><br /><span className="small muted">Un bug, une idée, un truc pas clair ? Dis-le-moi.</span></span>

@@ -12,6 +12,14 @@ export interface ChangeEntry { id: string; date: string; title: string; points: 
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    id: '2026-11-01-2',
+    date: '2026-11-01',
+    title: 'Tendances sur l’accueil',
+    points: [
+      { text: 'Tendances : accès direct depuis l’accueil (carte 🔥 Tendances), en plus du Menu.', beta: true },
+    ],
+  },
+  {
     id: '2026-11-01',
     date: '2026-11-01',
     title: 'Prix d’achat habituels et plusieurs comptes Gmail',
