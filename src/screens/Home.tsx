@@ -178,7 +178,7 @@ export function Home() {
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         {BETA && <MenuLink icon={<IMail width={18} height={18} />} title="Donner mon avis" sub="Un bug, une idée ? Ça m'arrive directement" to="avis" close={() => setMenu(false)} />}
         <MenuLink icon={<ISearch width={18} height={18} />} title="Assistant" sub="Pose une question : « mes 5 articles les plus rentables »" to="assistant" close={() => setMenu(false)} />
-        <MenuLink icon={<IHeart width={18} height={18} />} title="Tendances" sub="Les articles les plus likés que tu repères" to="tendances" close={() => setMenu(false)} />
+        {BETA && <MenuLink icon={<IHeart width={18} height={18} />} title="Tendances" sub="Les articles les plus likés que tu repères" to="tendances" close={() => setMenu(false)} />}
         <MenuLink icon={<IBox width={18} height={18} />} title="Invendus" sub="Argent immobilisé, ancienneté, marge selon le prix" to="invendus" close={() => setMenu(false)} />
         <MenuLink icon={<ICheck width={18} height={18} />} title="Vérification des comptes" sub="Chaque montant relié à son opération, contrôles" to="verification" close={() => setMenu(false)} />
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />
@@ -196,6 +196,7 @@ export function Home() {
         <MenuLink icon={<ICalc width={18} height={18} />} title="Calculateur de prix" sub="Simule un prix avant de publier" to="calculateur" close={() => setMenu(false)} />
         <MenuLink icon={<IWallet width={18} height={18} />} title="Trésorerie et réinvestissement" sub="Mouvements, réserve, budget d'achat" to="tresorerie" close={() => setMenu(false)} />
         <MenuLink icon={<IDownload width={18} height={18} />} title="Exports, import et sauvegarde" sub="Excel, PDF, CSV, import d'un ancien suivi" to="exports" close={() => setMenu(false)} />
+        <MenuLink icon={<IBell width={18} height={18} />} title="Nouveautés" sub="Ce qui a changé à chaque mise à jour" to="nouveautes" close={() => setMenu(false)} />
         <MenuLink icon={<IGear width={18} height={18} />} title="Réglages" sub="Objectifs, réserve, statut, catégories" to="reglages" close={() => setMenu(false)} />
       </Sheet>
     </>

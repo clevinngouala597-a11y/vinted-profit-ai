@@ -34,6 +34,7 @@ import { PhotoPrompts } from './screens/PhotoPrompts';
 import { Messages } from './screens/Messages';
 import { Republish } from './screens/Republish';
 import { Trends } from './screens/Trends';
+import { NewsPopup, NewsScreen } from './screens/News';
 import { MonthCard } from './screens/MonthCard';
 import { PullToRefresh } from './ui/PullToRefresh';
 import { Feedback } from './screens/Feedback';
@@ -123,7 +124,8 @@ function Shell() {
     case 'photos': screen = <PhotoPrompts />; break;
     case 'messages': screen = <Messages />; break;
     case 'republier': screen = <Republish />; break;
-    case 'tendances': screen = <Trends />; break;
+    case 'tendances': screen = BETA ? <Trends /> : <Home />; break;
+    case 'nouveautes': screen = <NewsScreen />; break;
     case 'resume': screen = <MonthCard />; break;
     case 'avis': screen = <Feedback from={r1} />; break;
     default: screen = <Home />;
@@ -140,6 +142,7 @@ function Shell() {
   return (
     <>
       <SaleBanner />
+      <NewsPopup />
       {wide && <Sidebar route={r0} onAdd={() => setAddOpen(true)} />}
       <PullToRefresh onRefresh={refresh}>
         <main className={`page page-${r0 || 'accueil'}`} key={wide && (r0 === 'ventes' || r0 === 'stock') ? r0 : r0 + (r1 ?? '')}>{screen}</main>

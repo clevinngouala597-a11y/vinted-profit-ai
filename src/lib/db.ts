@@ -63,7 +63,7 @@ export class VPDatabase extends Dexie {
     this.version(3).stores({ notifications: 'id' });
     // v4 : e-mails Vinted synchronisés
     this.version(4).stores({ syncedEmails: 'id, status, date' });
-    // v5 : tendances (articles repérés, ajoutés à la main)
+    // v5 : tendances (copie locale de la liste partagée par l'admin, hors sauvegardes)
     this.version(5).stores({ trends: 'id, addedAt' });
   }
 }
@@ -83,7 +83,6 @@ export const DATA_TABLES = [
   'goals',
   'notifications',
   'syncedEmails',
-  'trends',
 ] as const;
 
 let current = new VPDatabase();

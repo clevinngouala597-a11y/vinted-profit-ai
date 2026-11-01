@@ -33,13 +33,14 @@ export function Sidebar({ route, onAdd }: { route: string | undefined; onAdd: ()
   ];
   const tools: Link[] = [
     { to: 'assistant', label: 'Assistant', icon: <ISearch /> },
-    { to: 'tendances', label: 'Tendances', icon: <IHeart /> },
+    ...(BETA ? [{ to: 'tendances', label: 'Tendances', icon: <IHeart /> }] : []),
     { to: 'invendus', label: 'Invendus', icon: <IBox /> },
     { to: 'synchro', label: 'Synchro Vinted', icon: <IMail /> },
     { to: 'bordereaux', label: 'Bordereaux', icon: <IReceipt /> },
     { to: 'messages', label: 'Messages prêts', icon: <IMail /> },
     { to: 'republier', label: 'À republier', icon: <ITrend /> },
     { to: 'resume', label: 'Résumé du mois', icon: <IChart /> },
+    { to: 'nouveautes', label: 'Nouveautés', icon: <IBell /> },
     ...(s.showStock ? [{ to: 'depenses', label: 'Dépenses', icon: <IReceipt /> }] : []),
   ];
   const gestion: Link[] = [
