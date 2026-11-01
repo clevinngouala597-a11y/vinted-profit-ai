@@ -80,3 +80,6 @@ export const IEye = (p: SVGProps<SVGSVGElement>) => (
 export const IEyeOff = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-2.8 3.7M6.6 6.6C3.7 8.5 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /><path d="m3 3 18 18" /></svg>
 );
+export const IHeart = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base({ width: 18, height: 18, ...p })}><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" /></svg>
+);

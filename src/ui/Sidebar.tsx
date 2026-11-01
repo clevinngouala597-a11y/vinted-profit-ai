@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BETA, isLocked } from '../lib/beta';
 import { useData } from '../lib/useData';
-import { IBell, IBox, ICheck, ISearch, ICalc, IChart, IDownload, IGear, IHome, IMail, IPlus, IReceipt, IScale, ITag, ITarget, ITrend, IWallet } from './icons';
+import { IBell, IBox, ICheck, ISearch, ICalc, IChart, IDownload, IGear, IHome, IMail, IPlus, IReceipt, IScale, ITag, ITarget, ITrend, IWallet, IHeart } from './icons';
 
 /** Écran large (ordinateur, tablette en paysage) : menu latéral et mises en page en colonnes. */
 export const WIDE = '(min-width: 1024px)';
@@ -33,6 +33,7 @@ export function Sidebar({ route, onAdd }: { route: string | undefined; onAdd: ()
   ];
   const tools: Link[] = [
     { to: 'assistant', label: 'Assistant', icon: <ISearch /> },
+    { to: 'tendances', label: 'Tendances', icon: <IHeart /> },
     { to: 'invendus', label: 'Invendus', icon: <IBox /> },
     { to: 'synchro', label: 'Synchro Vinted', icon: <IMail /> },
     { to: 'bordereaux', label: 'Bordereaux', icon: <IReceipt /> },

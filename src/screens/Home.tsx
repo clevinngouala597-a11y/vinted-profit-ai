@@ -16,7 +16,7 @@ import { go } from '../lib/router';
 import { useData } from '../lib/useData';
 import { labelList, labelsToPrint } from '../lib/vinted/labels';
 import { TrendChart } from '../ui/TrendChart';
-import { IBox, ICheck, ISearch, IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet } from '../ui/icons';
+import { IBox, ICheck, ISearch, IChart as IChartBar, ITag, IBell, IEye, IEyeOff, IMail, ICalc, IChevron, IDownload, IGear, IMenu, IReceipt, IScale, ITarget, ITrend, IWallet, IHeart } from '../ui/icons';
 import { saveSettings } from '../lib/actions';
 import { BETA, isLocked } from '../lib/beta';
 import { isAdmin, viewAsTester } from '../lib/betaAccess';
@@ -178,6 +178,7 @@ export function Home() {
       <Sheet open={menu} onClose={() => setMenu(false)} title="Menu">
         {BETA && <MenuLink icon={<IMail width={18} height={18} />} title="Donner mon avis" sub="Un bug, une idée ? Ça m'arrive directement" to="avis" close={() => setMenu(false)} />}
         <MenuLink icon={<ISearch width={18} height={18} />} title="Assistant" sub="Pose une question : « mes 5 articles les plus rentables »" to="assistant" close={() => setMenu(false)} />
+        <MenuLink icon={<IHeart width={18} height={18} />} title="Tendances" sub="Les articles les plus likés que tu repères" to="tendances" close={() => setMenu(false)} />
         <MenuLink icon={<IBox width={18} height={18} />} title="Invendus" sub="Argent immobilisé, ancienneté, marge selon le prix" to="invendus" close={() => setMenu(false)} />
         <MenuLink icon={<ICheck width={18} height={18} />} title="Vérification des comptes" sub="Chaque montant relié à son opération, contrôles" to="verification" close={() => setMenu(false)} />
         <MenuLink icon={<IReceipt width={18} height={18} />} title="Dépenses et justificatifs" sub="Liste, catégories, photos de tickets" to="depenses" close={() => setMenu(false)} />

@@ -401,6 +401,26 @@ export interface NotificationState {
 }
 
 /** Ensemble des données de l'utilisateur, utilisé par le moteur de calcul (fonctions pures). */
+/** Article repéré (tendance), ajouté à la main : n'entre jamais dans la comptabilité. */
+export interface Trend {
+  id: string;
+  title: string;
+  brand: string;
+  size: string;
+  condition: string;
+  /** prix de l'annonce repérée */
+  price: Cents | null;
+  likes: number | null;
+  seller: string;
+  url: string;
+  /** description collée telle quelle */
+  text: string;
+  note: string;
+  photoId: string | null;
+  addedAt: ISOTime;
+  updatedAt: ISOTime;
+}
+
 export interface Dataset {
   goals: Goal[];
   settings: Settings;

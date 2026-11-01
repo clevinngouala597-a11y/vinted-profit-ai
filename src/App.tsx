@@ -33,6 +33,7 @@ import { Listing } from './screens/Listing';
 import { PhotoPrompts } from './screens/PhotoPrompts';
 import { Messages } from './screens/Messages';
 import { Republish } from './screens/Republish';
+import { Trends } from './screens/Trends';
 import { MonthCard } from './screens/MonthCard';
 import { PullToRefresh } from './ui/PullToRefresh';
 import { Feedback } from './screens/Feedback';
@@ -122,6 +123,7 @@ function Shell() {
     case 'photos': screen = <PhotoPrompts />; break;
     case 'messages': screen = <Messages />; break;
     case 'republier': screen = <Republish />; break;
+    case 'tendances': screen = <Trends />; break;
     case 'resume': screen = <MonthCard />; break;
     case 'avis': screen = <Feedback from={r1} />; break;
     default: screen = <Home />;
