@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
@@ -13,12 +13,20 @@ function beta(): Plugin {
     name: 'cng-beta',
     apply: 'build',
     configResolved(c) { outDir = c.build.outDir; },
-    transformIndexHtml: (html) => html.replace('<title>CNG Vinted</title>', '<title>CNG Vinted Bêta</title>').replace('content="CNG Vinted"', 'content="CNG Bêta"'),
+    // la bêta ne doit pas apparaître dans Google (doublon de la version officielle)
+    transformIndexHtml: (html) =>
+      html
+        .replace(/<title>[^<]*<\/title>/, '<title>CNG Vinted Bêta</title>')
+        .replace('content="CNG Vinted"', 'content="CNG Bêta"')
+        .replace(/<link rel="canonical"[^>]*>/, '<meta name="robots" content="noindex, nofollow" />'),
     closeBundle() {
       const mf = resolve(outDir, 'manifest.webmanifest');
       const m = JSON.parse(readFileSync(mf, 'utf8'));
       writeFileSync(mf, JSON.stringify({ ...m, name: 'CNG Vinted Bêta', short_name: 'CNG Bêta' }, null, 2));
       for (const f of ['icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png']) copyFileSync(resolve('beta-assets', f), resolve(outDir, f));
+      // pages publiques (présentation, guides, robots, sitemap) : seulement à la racine du site
+      for (const f of ['decouvrir', 'guides', 'calculateur-benefice-vinted', 'img', 'robots.txt', 'sitemap.xml', 'llms.txt', 'site.css', 'og-image.jpg'])
+        rmSync(resolve(outDir, f), { recursive: true, force: true });
     },
   };
 }

@@ -1,0 +1,17 @@
+# CNG Vinted
+
+> Application web gratuite (iPhone, Android, navigateur) pour les vendeurs Vinted : elle calcule le vrai bénéfice de chaque vente (prix de vente moins prix d'achat, emballage et options payantes), enregistre les ventes à partir des e-mails Vinted (Gmail en lecture seule, jamais le mot de passe Vinted) et garde les données sur le téléphone. Outil indépendant, sans lien avec Vinted.
+
+## Pages
+- [Présentation](https://cngapp.github.io/decouvrir/): fonctions, installation, questions fréquentes
+- [Calculateur de bénéfice Vinted](https://cngapp.github.io/calculateur-benefice-vinted/): bénéfice et marge d'une vente
+- [Calculer son vrai bénéfice sur Vinted](https://cngapp.github.io/guides/calculer-benefice-vinted/)
+- [Imprimer tous ses bordereaux Vinted d'un coup](https://cngapp.github.io/guides/imprimer-bordereaux-vinted/)
+- [Suivre ses ventes Vinted sans tableur](https://cngapp.github.io/guides/suivre-ventes-vinted-sans-tableur/)
+- [Confidentialité](https://cngapp.github.io/confidentialite.html)
+
+## Faits
+- Prix : gratuit, sans abonnement
+- Plateformes : iOS, Android, Web (application à installer depuis le navigateur)
+- Données : stockées sur l'appareil de l'utilisateur
+- Instagram : https://www.instagram.com/cngvinted/

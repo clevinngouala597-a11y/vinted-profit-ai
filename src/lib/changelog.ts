@@ -12,6 +12,16 @@ export interface ChangeEntry { id: string; date: string; title: string; points: 
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    id: '2026-11-22',
+    date: '2026-11-22',
+    title: 'Présentation, calculateur et guides',
+    points: [
+      { text: 'Nouvelle page de présentation de l’appli, à partager : cngapp.github.io/decouvrir' },
+      { text: 'Calculateur de bénéfice Vinted gratuit et guides (bénéfice, bordereaux, suivi des ventes), accessibles sans installer l’appli.' },
+      { text: 'Ouverture plus rapide dans le navigateur : l’écran de chargement est plus court (l’animation complète reste dans l’appli installée).' },
+    ],
+  },
+  {
     id: '2026-11-01-2',
     date: '2026-11-01',
     title: 'Tendances sur l’accueil',

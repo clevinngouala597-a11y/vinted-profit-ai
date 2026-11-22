@@ -8,14 +8,26 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="CNG Vinted" />
-    <meta name="description" content="Comptabilité, stock et rentabilité pour l'achat-revente sur Vinted." />
+    <meta name="description" content="Calcule ton vrai bénéfice sur chaque vente Vinted : ventes enregistrées depuis Gmail, stock, bordereaux en un PDF, bilan. Gratuit, iPhone et Android." />
+    <link rel="canonical" href="https://cngapp.github.io/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:site_name" content="CNG Vinted" />
+    <meta property="og:title" content="CNG Vinted — Appli gratuite de compta Vinted" />
+    <meta property="og:description" content="Ton vrai bénéfice sur chaque vente, sans tableur. Gratuit, sans abonnement." />
+    <meta property="og:url" content="https://cngapp.github.io/" />
+    <meta property="og:image" content="https://cngapp.github.io/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://cngapp.github.io/#org","name":"CNG Vinted","url":"https://cngapp.github.io/","logo":"https://cngapp.github.io/icon-512.png","sameAs":["https://www.instagram.com/cngvinted/"]},{"@type":"SoftwareApplication","name":"CNG Vinted","url":"https://cngapp.github.io/","applicationCategory":"FinanceApplication","operatingSystem":"iOS, Android, Web","inLanguage":"fr","description":"Application gratuite pour suivre ses ventes Vinted et calculer son vrai bénéfice : stock, dépenses, bordereaux, bilan et exports.","image":"https://cngapp.github.io/icon-512.png","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"publisher":{"@id":"https://cngapp.github.io/#org"}}]}</script>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <title>CNG Vinted</title>
+    <title>CNG Vinted — Appli gratuite de compta Vinted</title>
   </head>
   <body>
     <!-- Écran de chargement : affiché immédiatement, avant le JavaScript, puis retiré par l'application -->
@@ -29,7 +41,7 @@
           <path class="sp-head" d="M398 314 H432 V348" stroke="#63F77B" stroke-width="22"/>
         </g>
       </svg>
-      <div class="sp-name">CNG Vinted</div>
+      <h1 class="sp-name">CNG Vinted · compta Vinted gratuite</h1>
       <div class="sp-skip">Touche l'écran pour passer</div>
     </div>
     <script>
@@ -45,7 +57,7 @@
       html { background: var(--bg, #090B0A); } body { margin: 0; }
       #splash { position: fixed; inset: 0; z-index: 100; background: #090B0A; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; transition: opacity .8s ease, visibility .8s; cursor: pointer; -webkit-tap-highlight-color: transparent; }
       #splash.sp-hide { opacity: 0; visibility: hidden; }
-      #splash .sp-name { color: #A1A1AA; font: 600 15px/1 'Manrope', system-ui, -apple-system, sans-serif; letter-spacing: .02em; opacity: 0; animation: sp-fade 1.5s 5s ease forwards; }
+      #splash .sp-name { margin: 0; color: #A1A1AA; font: 600 15px/1 'Manrope', system-ui, -apple-system, sans-serif; letter-spacing: .02em; opacity: 0; animation: sp-fade 1.5s 5s ease forwards; }
       #splash .sp-l { opacity: 0; animation: sp-fade 2s ease forwards; }
       #splash .sp-l:nth-child(2) { animation-delay: .9s; }
       #splash .sp-l:nth-child(3) { animation-delay: 1.8s; }

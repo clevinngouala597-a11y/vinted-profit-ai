@@ -39,7 +39,14 @@ export function Onboarding() {
             <button className="btn btn-primary" disabled={busy} onClick={() => run(async () => { await loadDemoData(todayISO()); })}>{busy ? 'Préparation de l’exemple…' : 'Essayer avec un exemple'}</button>
             <button className="btn btn-ghost" disabled={busy} onClick={() => setStep(1)}>Configurer mon suivi</button>
           </div>
-        ) : <button className="btn btn-primary" onClick={() => setStep(1)}>Configurer mon suivi</button>}
+        ) : (
+          <>
+            <button className="btn btn-primary" onClick={() => setStep(1)}>Configurer mon suivi</button>
+            <p className="tiny muted" style={{ textAlign: 'center', margin: '14px 0 0' }}>
+              <a href="/decouvrir/">Présentation</a> · <a href="/guides/">Guides</a> · <a href="/calculateur-benefice-vinted/">Calculateur</a> · <a href="confidentialite.html">Confidentialité</a>
+            </p>
+          </>
+        )}
       </main>
     );
 

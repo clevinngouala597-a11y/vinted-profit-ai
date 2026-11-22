@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calculateur de bénéfice Vinted gratuit</title>
+<meta name="description" content="Calcule le bénéfice et la marge d’une vente Vinted : prix de vente, prix d’achat, emballage et Boost. Gratuit, sans inscription, résultat immédiat.">
+<link rel="canonical" href="https://cngapp.github.io/calculateur-benefice-vinted/">
+<meta name="theme-color" content="#090B0A">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:site_name" content="CNG Vinted">
+<meta property="og:title" content="Calculateur de bénéfice Vinted gratuit">
+<meta property="og:description" content="Calcule le bénéfice et la marge d’une vente Vinted : prix de vente, prix d’achat, emballage et Boost. Gratuit, sans inscription, résultat immédiat.">
+<meta property="og:url" content="https://cngapp.github.io/calculateur-benefice-vinted/">
+<meta property="og:image" content="https://cngapp.github.io/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="stylesheet" href="/site.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://cngapp.github.io/#org","name":"CNG Vinted","url":"https://cngapp.github.io/","logo":"https://cngapp.github.io/icon-512.png","sameAs":["https://www.instagram.com/cngvinted/"]},{"@type":"WebApplication","name":"Calculateur de bénéfice Vinted","url":"https://cngapp.github.io/calculateur-benefice-vinted/","applicationCategory":"FinanceApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"publisher":{"@id":"https://cngapp.github.io/#org"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"CNG Vinted","item":"https://cngapp.github.io/decouvrir/"},{"@type":"ListItem","position":2,"name":"Calculateur de bénéfice","item":"https://cngapp.github.io/calculateur-benefice-vinted/"}]}]}</script>
+</head>
+<body>
+<header class="top"><a class="brand" href="/decouvrir/"><svg viewBox="40 110 430 290" height="30" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M176.3 179.5 A65.0 65.0 0 1 0 176.3 266.5" stroke="currentColor" stroke-width="36"/><path d="M212 288 V158 L296 288 V158" stroke="currentColor" stroke-width="36"/><path d="M430.3 179.5 A65.0 65.0 0 1 0 447.0 223.0 H386" stroke="currentColor" stroke-width="36"/><path d="M63 372 H290 L330 350 L356 364 L432 314" stroke="#63F77B" stroke-width="22"/><path d="M398 314 H432 V348" stroke="#63F77B" stroke-width="22"/></g></svg><span>CNG Vinted</span></a>
+<nav><a href="/calculateur-benefice-vinted/">Calculateur</a><a href="/guides/">Guides</a><a class="cta-sm" href="/">Ouvrir l’appli</a></nav></header>
+<main>
+<h1>Calculateur de bénéfice Vinted</h1>
+<p class="lead">Entre le prix de vente et ce que l’article t’a coûté : le bénéfice et la marge s’affichent tout de suite.</p>
+<form class="card calc" id="calc" onsubmit="return false">
+<label>Prix de vente sur Vinted (€)<input inputmode="decimal" id="vente" placeholder="25" autocomplete="off"></label>
+<label>Prix d’achat de l’article (€)<input inputmode="decimal" id="achat" placeholder="8" autocomplete="off"></label>
+<label>Emballage (€)<input inputmode="decimal" id="emb" placeholder="0,50" autocomplete="off"></label>
+<label>Boost, vitrine et autres frais (€)<input inputmode="decimal" id="autres" placeholder="0" autocomplete="off"></label>
+<output id="res" aria-live="polite"><span class="mut">Entre au moins le prix de vente.</span></output></form>
+<section><h2>Comment le calcul est fait</h2>
+<p><b>Bénéfice = prix de vente − prix d’achat − emballage − autres frais.</b> La marge est le bénéfice divisé par le prix de vente.</p>
+<p>En France, un vendeur particulier ne paie pas de commission sur ses ventes Vinted : les frais de protection et de livraison sont payés par l’acheteur, et le bordereau d’envoi est prépayé. Les options de visibilité (Boost, dressing en vitrine) sont payantes pour le vendeur, mais facultatives. Les montants peuvent changer : vérifie la <a href="https://www.vinted.fr/pricelist" rel="nofollow">grille tarifaire de Vinted</a>.</p></section>
+<aside class="card app"><p><b>Fais-le automatiquement avec CNG Vinted.</b> L’appli enregistre tes ventes depuis tes e-mails Vinted et calcule le bénéfice de chaque article. Gratuit, iPhone et Android.</p><p><a class="cta" href="/decouvrir/">Découvrir l’appli</a></p></aside>
+</main>
+<footer><div class="wrap">
+<p><a href="/decouvrir/">Présentation</a> · <a href="/calculateur-benefice-vinted/">Calculateur de bénéfice</a> · <a href="/guides/">Guides</a> · <a href="/confidentialite.html">Confidentialité</a> · <a href="/conditions.html">Conditions d’utilisation</a> · <a href="https://www.instagram.com/cngvinted/" rel="me">Instagram</a></p>
+<p class="mut">CNG Vinted est un outil indépendant, sans lien avec Vinted. Mis à jour le 22 novembre 2026.</p>
+</div></footer>
+<script>
+(function(){var f=function(id){var v=(document.getElementById(id).value||'').replace(/\s/g,'').replace(',','.');var n=parseFloat(v);return isFinite(n)?n:0};
+var eur=function(n){return n.toLocaleString('fr-FR',{style:'currency',currency:'EUR'})};
+function run(){var v=f('vente'),a=f('achat'),e=f('emb'),o=f('autres'),out=document.getElementById('res');
+if(!v){out.innerHTML='<span class="mut">Entre au moins le prix de vente.</span>';return}
+var b=v-a-e-o,m=b/v*100,roi=a>0?b/a*100:null;
+out.innerHTML='<span class="big '+(b>=0?'g':'r')+'">'+(b>=0?'+':'')+eur(b)+'</span><span>Marge : '+m.toFixed(0)+' %'+(roi===null?'':' · Rentabilité de l’achat : '+roi.toFixed(0)+' %')+'</span>'}
+document.getElementById('calc').addEventListener('input',run);run()})();
+</script>
+</body>
+</html>

@@ -190,8 +190,13 @@ function TabLink({ to, label, icon, current }: { to: string; label: string; icon
   );
 }
 
-/** Durée d'affichage de l'écran de chargement (l'utilisateur peut toucher l'écran pour passer). */
+/**
+ * Durée d'affichage de l'écran de chargement (l'utilisateur peut toucher l'écran pour passer) :
+ * l'animation complète dans l'appli installée, courte dans le navigateur (premières visites, Google).
+ */
 const SPLASH_MIN_MS = 10000;
+const SPLASH_BROWSER_MS = 2500;
+const installed = () => window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
 function useSplash(ready: boolean) {
   useEffect(() => {
@@ -199,7 +204,7 @@ function useSplash(ready: boolean) {
     const el = document.getElementById('splash');
     if (!el) return;
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const wait = reduced ? 0 : Math.max(0, SPLASH_MIN_MS - performance.now());
+    const wait = reduced ? 0 : Math.max(0, (installed() ? SPLASH_MIN_MS : SPLASH_BROWSER_MS) - performance.now());
     const t1 = window.setTimeout(() => el.classList.add('sp-hide'), wait);
     const t2 = window.setTimeout(() => el.remove(), wait + 850);
     return () => {
