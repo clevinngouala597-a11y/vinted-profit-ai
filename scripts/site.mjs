@@ -148,7 +148,7 @@ document.getElementById('calc').addEventListener('input',run);run()})();
   'guides/index.html': page({
     path: '/guides/',
     title: 'Guides pour vendeurs Vinted · CNG Vinted',
-    description: 'Guides pratiques pour vendeurs Vinted : calculer son vrai bénéfice, imprimer tous ses bordereaux d’un coup, suivre ses ventes sans tableur.',
+    description: 'Guides pratiques pour vendeurs Vinted : vrai bénéfice, prix de revente, achat en lot, bordereaux imprimés d’un coup, suivi des ventes sans tableur.',
     h1: 'Guides pour vendeurs Vinted',
     lead: 'Des réponses courtes aux questions que se posent les revendeurs.',
     schema: [crumbs([['CNG Vinted', '/decouvrir/'], ['Guides', '/guides/']])],
@@ -156,6 +156,8 @@ document.getElementById('calc').addEventListener('input',run);run()})();
 <li><a href="/guides/calculer-benefice-vinted/"><b>Calculer son vrai bénéfice sur Vinted</b><span>Ce qu’il faut retirer du prix de vente, avec un exemple chiffré.</span></a></li>
 <li><a href="/guides/imprimer-bordereaux-vinted/"><b>Imprimer tous ses bordereaux Vinted d’un coup</b><span>Fini d’ouvrir chaque e-mail un par un.</span></a></li>
 <li><a href="/guides/suivre-ventes-vinted-sans-tableur/"><b>Suivre ses ventes Vinted sans tableur</b><span>Ce qu’il faut noter, et comment l’automatiser.</span></a></li>
+<li><a href="/guides/prix-revente-vinted/"><b>Fixer le bon prix de revente sur Vinted</b><span>Coût, marge visée, comparaison et négociation.</span></a></li>
+<li><a href="/guides/rentabiliser-lot-vinted/"><b>Acheter un lot : le coût de chaque article</b><span>Répartir le prix d’un lot pour connaître le bénéfice de chaque article.</span></a></li>
 <li><a href="/calculateur-benefice-vinted/"><b>Calculateur de bénéfice Vinted</b><span>Le résultat d’une vente en 10 secondes.</span></a></li></ul>`,
   }),
 
@@ -230,6 +232,54 @@ ${appBox}`,
 <p>Tu obtiens le bénéfice de chaque vente, le bilan du mois, ton stock et des exports Excel ou PDF.</p>
 ${appBox}`,
   }),
+
+  'guides/prix-revente-vinted/index.html': page({
+    path: '/guides/prix-revente-vinted/',
+    ogType: 'article',
+    title: 'Fixer le bon prix de revente sur Vinted',
+    description: 'Comment fixer le prix d’un article sur Vinted : partir de ce qu’il t’a coûté, viser une marge, comparer aux annonces similaires et laisser une place à la négociation.',
+    h1: 'Fixer le bon prix de revente sur Vinted',
+    lead: 'Un bon prix couvre ce que l’article t’a coûté, te laisse la marge que tu vises et reste dans la fourchette des annonces similaires. Voici une méthode en 4 étapes.',
+    schema: [article('/guides/prix-revente-vinted/', 'Fixer le bon prix de revente sur Vinted', 'Méthode en 4 étapes pour fixer le prix d’un article sur Vinted.'), crumbs([['CNG Vinted', '/decouvrir/'], ['Guides', '/guides/'], ['Prix de revente', '/guides/prix-revente-vinted/']])],
+    body: `<ol class="steps">
+<li><b>Calcule ton coût</b> : prix d’achat de l’article, plus l’emballage et les frais liés (nettoyage, retouches).</li>
+<li><b>Ajoute la marge que tu vises</b> : par exemple 10 € par article, ou un pourcentage du prix de vente. Prix minimum = coût + marge visée.</li>
+<li><b>Compare</b> : cherche le même article (marque, taille, état) sur Vinted et regarde les prix des annonces. Si ton prix minimum est au-dessus, l’article risque de dormir.</li>
+<li><b>Garde une marge de négociation</b> : beaucoup d’acheteurs font une offre. Affiche un peu au-dessus de ton prix minimum pour pouvoir accepter une offre sans perdre d’argent.</li></ol>
+<h2>Exemple</h2>
+<table><thead><tr><th>Ligne</th><th>Montant</th></tr></thead><tbody>
+<tr><td>Achat en friperie</td><td>8,00 €</td></tr><tr><td>Emballage</td><td>0,50 €</td></tr><tr><td>Marge visée</td><td>10,00 €</td></tr>
+<tr><td><b>Prix minimum accepté</b></td><td><b>18,50 €</b></td></tr><tr><td>Prix affiché (marge de négociation)</td><td>22,00 €</td></tr></tbody></table>
+<h2>Les erreurs fréquentes</h2>
+<ul><li>Fixer le prix d’après ce que tu as payé neuf : l’acheteur compare avec les annonces d’occasion.</li>
+<li>Oublier l’emballage et les options payantes (Boost) dans le coût.</li>
+<li>Ne jamais baisser un article qui ne se vend pas : de l’argent reste bloqué dans ton stock.</li></ul>
+<p><a class="cta" href="/calculateur-benefice-vinted/">Tester un prix avec le calculateur</a></p>
+${appBox}`,
+  }),
+
+  'guides/rentabiliser-lot-vinted/index.html': page({
+    path: '/guides/rentabiliser-lot-vinted/',
+    ogType: 'article',
+    title: 'Lot pour la revente Vinted : le coût de chaque article',
+    description: 'Tu achètes un lot de vêtements pour le revendre sur Vinted ? Comment répartir le prix du lot entre les articles pour connaître le vrai bénéfice de chacun.',
+    h1: 'Acheter un lot : le coût de chaque article',
+    lead: 'Quand tu achètes un lot, chaque article doit porter une part du prix. Sans ça, impossible de savoir lesquels sont rentables. Il existe deux façons simples de répartir.',
+    schema: [article('/guides/rentabiliser-lot-vinted/', 'Acheter un lot pour la revente : calculer le coût de chaque article', 'Répartir le prix d’un lot entre ses articles pour connaître le bénéfice de chacun.'), crumbs([['CNG Vinted', '/decouvrir/'], ['Guides', '/guides/'], ['Rentabiliser un lot', '/guides/rentabiliser-lot-vinted/']])],
+    body: `<h2>1. Parts égales</h2>
+<p>Le prix du lot est divisé par le nombre d’articles. Simple, mais injuste quand les articles n’ont pas la même valeur : une veste et un t-shirt portent le même coût.</p>
+<h2>2. Selon le prix de revente visé</h2>
+<p>Chaque article porte une part proportionnelle au prix auquel tu comptes le revendre. Un article qui se revend plus cher porte une plus grande part du lot.</p>
+<h2>Exemple : lot de 3 articles acheté 30 €</h2>
+<table><thead><tr><th>Article</th><th>Prix visé</th><th>Parts égales</th><th>Selon le prix visé</th></tr></thead><tbody>
+<tr><td>Veste</td><td>40 €</td><td>10,00 €</td><td>20,00 €</td></tr>
+<tr><td>Sweat</td><td>14 €</td><td>10,00 €</td><td>7,00 €</td></tr>
+<tr><td>T-shirt</td><td>6 €</td><td>10,00 €</td><td>3,00 €</td></tr></tbody></table>
+<p>Avec des parts égales, le t-shirt semble vendu à perte (6 € pour 10 € de coût) alors que le lot entier est rentable. La répartition selon le prix visé donne une image plus juste.</p>
+<h2>Dans CNG Vinted</h2>
+<p>Quand tu enregistres un achat en lot, tu choisis la répartition : selon le prix souhaité, parts égales, ou montant saisi à la main. Le coût de chaque article est ensuite utilisé pour calculer le bénéfice de sa vente.</p>
+${appBox}`,
+  }),
 };
 
 const ROBOTS = `User-agent: *
@@ -240,7 +290,7 @@ Sitemap: ${SITE}/sitemap.xml
 `;
 const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${['/', '/decouvrir/', '/calculateur-benefice-vinted/', '/guides/', '/guides/calculer-benefice-vinted/', '/guides/imprimer-bordereaux-vinted/', '/guides/suivre-ventes-vinted-sans-tableur/', '/confidentialite.html', '/conditions.html']
+${['/', '/decouvrir/', '/calculateur-benefice-vinted/', '/guides/', '/guides/calculer-benefice-vinted/', '/guides/imprimer-bordereaux-vinted/', '/guides/suivre-ventes-vinted-sans-tableur/', '/guides/prix-revente-vinted/', '/guides/rentabiliser-lot-vinted/', '/confidentialite.html', '/conditions.html']
   .map((p) => `  <url><loc>${SITE}${p}</loc><lastmod>${UPDATED}</lastmod></url>`).join('\n')}
 </urlset>
 `;
@@ -254,6 +304,8 @@ const LLMS = `# CNG Vinted
 - [Calculer son vrai bénéfice sur Vinted](${SITE}/guides/calculer-benefice-vinted/)
 - [Imprimer tous ses bordereaux Vinted d'un coup](${SITE}/guides/imprimer-bordereaux-vinted/)
 - [Suivre ses ventes Vinted sans tableur](${SITE}/guides/suivre-ventes-vinted-sans-tableur/)
+- [Fixer le bon prix de revente sur Vinted](${SITE}/guides/prix-revente-vinted/)
+- [Acheter un lot : le coût de chaque article](${SITE}/guides/rentabiliser-lot-vinted/)
 - [Confidentialité](${SITE}/confidentialite.html)
 
 ## Faits

@@ -24,9 +24,6 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <title>CNG Vinted — Appli gratuite de compta Vinted</title>
   </head>
   <body>
@@ -57,13 +54,13 @@
       html { background: var(--bg, #090B0A); } body { margin: 0; }
       #splash { position: fixed; inset: 0; z-index: 100; background: #090B0A; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; transition: opacity .8s ease, visibility .8s; cursor: pointer; -webkit-tap-highlight-color: transparent; }
       #splash.sp-hide { opacity: 0; visibility: hidden; }
-      #splash .sp-name { margin: 0; color: #A1A1AA; font: 600 15px/1 'Manrope', system-ui, -apple-system, sans-serif; letter-spacing: .02em; opacity: 0; animation: sp-fade 1.5s 5s ease forwards; }
+      #splash .sp-name { margin: 0; color: #A1A1AA; font: 600 15px/1 'Manrope Variable', 'Manrope', system-ui, -apple-system, sans-serif; letter-spacing: .02em; opacity: 0; animation: sp-fade 1.5s 5s ease forwards; }
       #splash .sp-l { opacity: 0; animation: sp-fade 2s ease forwards; }
       #splash .sp-l:nth-child(2) { animation-delay: .9s; }
       #splash .sp-l:nth-child(3) { animation-delay: 1.8s; }
       #splash .sp-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: sp-draw 4s 3.5s cubic-bezier(.45,0,.25,1) forwards; }
       #splash .sp-head { opacity: 0; animation: sp-fade .6s 7.4s ease forwards; }
-      #splash .sp-skip { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); color: #6B6F6B; font: 500 13px/1 'Manrope', system-ui, -apple-system, sans-serif; opacity: 0; animation: sp-fade 1s 2.5s ease forwards; }
+      #splash .sp-skip { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); color: #6B6F6B; font: 500 13px/1 'Manrope Variable', 'Manrope', system-ui, -apple-system, sans-serif; opacity: 0; animation: sp-fade 1s 2.5s ease forwards; }
       @keyframes sp-draw { to { stroke-dashoffset: 0; } }
       @keyframes sp-fade { to { opacity: 1; } }
       @media (prefers-reduced-motion: reduce) {

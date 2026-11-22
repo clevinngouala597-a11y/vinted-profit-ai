@@ -12,6 +12,15 @@ export interface ChangeEntry { id: string; date: string; title: string; points: 
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    id: '2026-11-23',
+    date: '2026-11-23',
+    title: 'Ouverture plus rapide',
+    points: [
+      { text: 'L’appli se charge plus vite : chaque écran est chargé quand tu l’ouvres, puis tout est gardé sur le téléphone pour marcher sans réseau.' },
+      { text: 'Deux nouveaux guides : fixer son prix de revente et calculer le coût de chaque article d’un lot (cngapp.github.io/guides).' },
+    ],
+  },
+  {
     id: '2026-11-22',
     date: '2026-11-22',
     title: 'Présentation, calculateur et guides',

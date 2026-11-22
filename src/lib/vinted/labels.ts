@@ -6,7 +6,6 @@
  * instructions de Vinted autour) et placé sur une page 10 × 15 cm, tourné si besoin. Le découpage reste
  * vectoriel : codes-barres nets à l'impression.
  */
-import { degrees, PDFDocument } from 'pdf-lib';
 import type { SyncedEmail } from '../types';
 import type { VintedEvent } from './parse';
 
@@ -135,6 +134,8 @@ const MM = 72 / 25.4;
 export const LABEL_PAGE = { width: 100 * MM, height: 150 * MM };
 
 export async function composeLabels(pdfs: Uint8Array[], format: 'etiquette' | 'a4', boxes: (Box | null)[][] = []): Promise<Uint8Array> {
+  // bibliothèque PDF chargée seulement au moment d'imprimer
+  const { degrees, PDFDocument } = await import('pdf-lib');
   const out = await PDFDocument.create();
   out.setTitle('Bordereaux Vinted');
   for (let k = 0; k < pdfs.length; k++) {

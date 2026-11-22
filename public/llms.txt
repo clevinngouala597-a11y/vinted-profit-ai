@@ -8,6 +8,8 @@
 - [Calculer son vrai bénéfice sur Vinted](https://cngapp.github.io/guides/calculer-benefice-vinted/)
 - [Imprimer tous ses bordereaux Vinted d'un coup](https://cngapp.github.io/guides/imprimer-bordereaux-vinted/)
 - [Suivre ses ventes Vinted sans tableur](https://cngapp.github.io/guides/suivre-ventes-vinted-sans-tableur/)
+- [Fixer le bon prix de revente sur Vinted](https://cngapp.github.io/guides/prix-revente-vinted/)
+- [Acheter un lot : le coût de chaque article](https://cngapp.github.io/guides/rentabiliser-lot-vinted/)
 - [Confidentialité](https://cngapp.github.io/confidentialite.html)
 
 ## Faits

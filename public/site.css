@@ -35,3 +35,4 @@ table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 16px;
 .calc .big { font-size: 40px; font-weight: 800; letter-spacing: -1px; }
 .app { border-color: rgba(99, 247, 123, .35); }
 footer { border-top: 1px solid var(--line); margin-top: 32px; } footer .wrap { max-width: 960px; margin: 0 auto; padding: 20px 16px 40px; font-size: 15px; }
+.steps { padding-left: 22px; } .steps li { margin: 10px 0; }

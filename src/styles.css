@@ -42,7 +42,7 @@
 html { background: var(--bg); }
 html, body { margin: 0; color: var(--text); }
 body {
-  font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+  font-family: 'Manrope Variable', 'Manrope', system-ui, -apple-system, sans-serif;
   font-size: 15px;
   line-height: 1.45;
   font-variant-numeric: tabular-nums;

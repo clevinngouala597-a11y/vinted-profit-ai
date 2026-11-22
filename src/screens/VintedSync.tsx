@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { syncSummary } from '../lib/vinted/summary';
 import { useEffect, useMemo, useState } from 'react';
 import { completeItemCost, saveSettings, setCustomSound } from '../lib/actions';
 import { getDb } from '../lib/db';
@@ -16,15 +17,11 @@ import { getSession, googleReady, startGoogleLogin, tokenValid } from '../lib/go
 import { accountsOf, removeAccount, updateAccount } from '../lib/google/accounts';
 import { MAIN, shopsOf } from '../lib/shops';
 import { EVENT_LABEL, titleSimilarity, type VintedEvent } from '../lib/vinted/parse';
-import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales, type SyncResult } from '../lib/vinted/sync';
+import { dismissSynced, guessCategory, NO_PAYMENT_DAYS, pairEvents, resolveSale, syncNow, unpaidInboxSales } from '../lib/vinted/sync';
 import { cents, Empty, ErrorBox, Field, MoneyInput, PageHeader, useAction, useUI } from '../ui/kit';
 import { sinceLabel, syncHealth } from '../lib/vinted/reliability';
 
-export const syncSummary = (r: SyncResult) =>
-  (r.added === 0
-    ? 'Aucun nouvel e-mail Vinted.'
-    : `${r.applied} opération${r.applied > 1 ? 's' : ''} enregistrée${r.applied > 1 ? 's' : ''}${r.inbox ? ` · ${r.inbox} à valider` : ''}.`)
-  + (r.failed ? ` ${r.failed} e-mail${r.failed > 1 ? 's' : ''} pas encore lu${r.failed > 1 ? 's' : ''} (coupure) : ${r.failed > 1 ? 'ils seront relus' : 'il sera relu'} à la prochaine synchro.` : '');
+export { syncSummary } from '../lib/vinted/summary';
 
 // ---------------------------------------------------------------------------
 // Réglage et installation

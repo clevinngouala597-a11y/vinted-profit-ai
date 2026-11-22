@@ -1,43 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { go, useRoute } from './lib/router';
 import { DataContext, FullDataContext, useData, useLiveDataset } from './lib/useData';
 import { SaleBanner } from './ui/SaleBanner';
 import { IBox, IChart, IHome, IPlus, ITag, ICart, IReceipt } from './ui/icons';
 import { Sheet, UIProvider } from './ui/kit';
 import { Home } from './screens/Home';
-import { Stock } from './screens/Stock';
-import { ItemDetail } from './screens/ItemDetail';
-import { Sales } from './screens/Sales';
-import { SaleDetail } from './screens/SaleDetail';
-import { Bilan } from './screens/Bilan';
-import { PurchaseForm } from './screens/PurchaseForm';
-import { SaleForm } from './screens/SaleForm';
-import { ExpenseForm, Expenses } from './screens/Expenses';
-import { Calculator } from './screens/Calculator';
-import { Treasury } from './screens/Treasury';
-import { Exports } from './screens/Exports';
-import { SettingsScreen } from './screens/Settings';
-import { Controle, JournalScreen } from './screens/Controle';
-import { Unsold } from './screens/Unsold';
-import { Assistant } from './screens/Assistant';
-import { AdminUsers } from './screens/AdminUsers';
 import { Onboarding } from './screens/Onboarding';
-import { Goals } from './screens/Goals';
-import { Import } from './screens/Import';
-import { NotificationsScreen } from './screens/Notifications';
-import { ForecastScreen } from './screens/Forecast';
-import { Fiscal } from './screens/Fiscal';
-import { Labels } from './screens/Labels';
-import { Stats } from './screens/Stats';
-import { Listing } from './screens/Listing';
-import { PhotoPrompts } from './screens/PhotoPrompts';
-import { Messages } from './screens/Messages';
-import { Republish } from './screens/Republish';
-import { Trends } from './screens/Trends';
 import { NewsPopup, NewsScreen } from './screens/News';
-import { MonthCard } from './screens/MonthCard';
 import { PullToRefresh } from './ui/PullToRefresh';
-import { Feedback } from './screens/Feedback';
 import { BetaGate, Locked } from './screens/BetaGate';
 import { BETA, isLocked } from './lib/beta';
 import { storedAccess } from './lib/betaAccess';
@@ -46,9 +16,88 @@ import { applyTheme } from './lib/theme';
 import { activeShop, scopeDataset } from './lib/shops';
 import { AppLock } from './ui/AppLock';
 import { Sidebar, useWide } from './ui/Sidebar';
-import { MissingCosts, SyncInbox, VintedSyncScreen, syncSummary } from './screens/VintedSync';
+import { syncSummary } from './lib/vinted/summary';
 import { syncNow } from './lib/vinted/sync';
 import { useUI } from './ui/kit';
+
+// Écrans chargés à la demande (ouverture plus rapide), puis tous préchargés en arrière-plan
+// pour que l'appli reste utilisable hors ligne.
+const Stock = lazy(() => import('./screens/Stock').then((m) => ({ default: m.Stock })));
+const ItemDetail = lazy(() => import('./screens/ItemDetail').then((m) => ({ default: m.ItemDetail })));
+const Sales = lazy(() => import('./screens/Sales').then((m) => ({ default: m.Sales })));
+const SaleDetail = lazy(() => import('./screens/SaleDetail').then((m) => ({ default: m.SaleDetail })));
+const Bilan = lazy(() => import('./screens/Bilan').then((m) => ({ default: m.Bilan })));
+const PurchaseForm = lazy(() => import('./screens/PurchaseForm').then((m) => ({ default: m.PurchaseForm })));
+const SaleForm = lazy(() => import('./screens/SaleForm').then((m) => ({ default: m.SaleForm })));
+const ExpenseForm = lazy(() => import('./screens/Expenses').then((m) => ({ default: m.ExpenseForm })));
+const Expenses = lazy(() => import('./screens/Expenses').then((m) => ({ default: m.Expenses })));
+const Calculator = lazy(() => import('./screens/Calculator').then((m) => ({ default: m.Calculator })));
+const Treasury = lazy(() => import('./screens/Treasury').then((m) => ({ default: m.Treasury })));
+const Exports = lazy(() => import('./screens/Exports').then((m) => ({ default: m.Exports })));
+const SettingsScreen = lazy(() => import('./screens/Settings').then((m) => ({ default: m.SettingsScreen })));
+const Controle = lazy(() => import('./screens/Controle').then((m) => ({ default: m.Controle })));
+const JournalScreen = lazy(() => import('./screens/Controle').then((m) => ({ default: m.JournalScreen })));
+const Unsold = lazy(() => import('./screens/Unsold').then((m) => ({ default: m.Unsold })));
+const Assistant = lazy(() => import('./screens/Assistant').then((m) => ({ default: m.Assistant })));
+const AdminUsers = lazy(() => import('./screens/AdminUsers').then((m) => ({ default: m.AdminUsers })));
+const Goals = lazy(() => import('./screens/Goals').then((m) => ({ default: m.Goals })));
+const Import = lazy(() => import('./screens/Import').then((m) => ({ default: m.Import })));
+const NotificationsScreen = lazy(() => import('./screens/Notifications').then((m) => ({ default: m.NotificationsScreen })));
+const ForecastScreen = lazy(() => import('./screens/Forecast').then((m) => ({ default: m.ForecastScreen })));
+const Fiscal = lazy(() => import('./screens/Fiscal').then((m) => ({ default: m.Fiscal })));
+const Labels = lazy(() => import('./screens/Labels').then((m) => ({ default: m.Labels })));
+const Stats = lazy(() => import('./screens/Stats').then((m) => ({ default: m.Stats })));
+const Listing = lazy(() => import('./screens/Listing').then((m) => ({ default: m.Listing })));
+const PhotoPrompts = lazy(() => import('./screens/PhotoPrompts').then((m) => ({ default: m.PhotoPrompts })));
+const Messages = lazy(() => import('./screens/Messages').then((m) => ({ default: m.Messages })));
+const Republish = lazy(() => import('./screens/Republish').then((m) => ({ default: m.Republish })));
+const Trends = lazy(() => import('./screens/Trends').then((m) => ({ default: m.Trends })));
+const MonthCard = lazy(() => import('./screens/MonthCard').then((m) => ({ default: m.MonthCard })));
+const Feedback = lazy(() => import('./screens/Feedback').then((m) => ({ default: m.Feedback })));
+const MissingCosts = lazy(() => import('./screens/VintedSync').then((m) => ({ default: m.MissingCosts })));
+const SyncInbox = lazy(() => import('./screens/VintedSync').then((m) => ({ default: m.SyncInbox })));
+const VintedSyncScreen = lazy(() => import('./screens/VintedSync').then((m) => ({ default: m.VintedSyncScreen })));
+const SCREENS: (() => Promise<unknown>)[] = [
+  () => import('./screens/Stock'),
+  () => import('./screens/ItemDetail'),
+  () => import('./screens/Sales'),
+  () => import('./screens/SaleDetail'),
+  () => import('./screens/Bilan'),
+  () => import('./screens/PurchaseForm'),
+  () => import('./screens/SaleForm'),
+  () => import('./screens/Expenses'),
+  () => import('./screens/Calculator'),
+  () => import('./screens/Treasury'),
+  () => import('./screens/Exports'),
+  () => import('./screens/Settings'),
+  () => import('./screens/Controle'),
+  () => import('./screens/Unsold'),
+  () => import('./screens/Assistant'),
+  () => import('./screens/AdminUsers'),
+  () => import('./screens/Goals'),
+  () => import('./screens/Import'),
+  () => import('./screens/Notifications'),
+  () => import('./screens/Forecast'),
+  () => import('./screens/Fiscal'),
+  () => import('./screens/Labels'),
+  () => import('./screens/Stats'),
+  () => import('./screens/Listing'),
+  () => import('./screens/PhotoPrompts'),
+  () => import('./screens/Messages'),
+  () => import('./screens/Republish'),
+  () => import('./screens/Trends'),
+  () => import('./screens/MonthCard'),
+  () => import('./screens/Feedback'),
+  () => import('./screens/VintedSync'),
+];
+function usePreloadScreens() {
+  useEffect(() => {
+    const run = () => SCREENS.reduce((p, load) => p.then(() => load().catch(() => {})), Promise.resolve() as Promise<unknown>);
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    const t = window.setTimeout(() => (w.requestIdleCallback ? w.requestIdleCallback(run, { timeout: 4000 }) : run()), 1500);
+    return () => window.clearTimeout(t);
+  }, []);
+}
 
 export function App() {
   const ds = useLiveDataset();
@@ -88,6 +137,7 @@ function Shell() {
   useEffect(() => installPeek(), []);
   const [addOpen, setAddOpen] = useState(false);
   useAutoSync();
+  usePreloadScreens();
   const wide = useWide();
 
   let screen;
@@ -145,7 +195,7 @@ function Shell() {
       <NewsPopup />
       {wide && <Sidebar route={r0} onAdd={() => setAddOpen(true)} />}
       <PullToRefresh onRefresh={refresh}>
-        <main className={`page page-${r0 || 'accueil'}`} key={wide && (r0 === 'ventes' || r0 === 'stock') ? r0 : r0 + (r1 ?? '')}>{screen}</main>
+        <main className={`page page-${r0 || 'accueil'}`} key={wide && (r0 === 'ventes' || r0 === 'stock') ? r0 : r0 + (r1 ?? '')}><Suspense fallback={null}>{screen}</Suspense></main>
       </PullToRefresh>
       <nav className="tabbar" aria-label="Navigation principale">
         <div className="tabbar-inner">
